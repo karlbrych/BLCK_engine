@@ -22,9 +22,4 @@ end
 function Player:shutdown()
     --TODO: destruktor hrace
 end
-
--- Returning the class is what makes require("player") hand back Player rather
--- than `true`. Because Player.__index is Player, the script manager reads this
--- as a class to instantiate and leaves the methods below to the scene, instead
--- of running them once a frame against the class table itself.
 return Player
