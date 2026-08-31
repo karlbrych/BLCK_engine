@@ -11,8 +11,6 @@
 #include <glm/glm.hpp>
 #endif
 
-// The mesh only needs plain float vectors for its layout, so glm stays optional:
-// both variants are standard-layout and byte-identical, which is all OpenGL sees.
 #ifdef HAVE_GLM
 using Vec2 = glm::vec2;
 using Vec3 = glm::vec3;
@@ -27,7 +25,7 @@ struct Vec3
 };
 #endif
 
-// The default interleaved vertex format: location 0 = position, 1 = normal, 2 = uv.
+
 struct Vertex
 {
     Vec3 position{};
@@ -37,36 +35,28 @@ struct Vertex
 
 static_assert(sizeof(Vertex) == 32, "Vertex must stay tightly packed for the GPU layout");
 
-// One attribute of a custom (non-Vertex) interleaved format.
 struct VertexAttribute
 {
     GLuint location = 0;
-    GLint components = 3;            // 1..4
-    GLuint offset = 0;               // bytes from the start of the vertex
+    GLint components = 3;            
+    GLuint offset = 0;              
     GLenum type = GL_FLOAT;
     GLboolean normalized = GL_FALSE;
 };
 
-// A VAO plus the buffers it owns. Move-only: two Mesh objects must never end up
-// holding the same GL names, or the first destructor would delete live buffers.
-//
-// A Mesh must be created and destroyed while the GL context that owns it is
-// current -- scope your meshes inside the render loop's lifetime.
 class Mesh
 {
 public:
     Mesh() = default;
 
-    // Standard Vertex layout. Pass an empty index span for non-indexed drawing.
+
     explicit Mesh(std::span<const Vertex> vertices, std::span<const std::uint32_t> indices = {},
                   bool dynamic = false);
 
-    // Custom interleaved layout: raw bytes plus the attributes that describe them.
     Mesh(std::span<const std::byte> vertexData, GLsizei stride,
          std::span<const VertexAttribute> attributes, std::span<const std::uint32_t> indices = {},
          bool dynamic = false);
 
-    // Convenience overload for the common "vector<float> of interleaved data" case.
     Mesh(std::span<const float> vertexData, GLsizei stride,
          std::span<const VertexAttribute> attributes, std::span<const std::uint32_t> indices = {},
          bool dynamic = false);

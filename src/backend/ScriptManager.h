@@ -11,25 +11,9 @@
 struct GLFWwindow;
 class Renderer;
 
-// Owns the Lua VM and every gameplay script under the script root
-// (src/gameplay/, deployed as gameplay/ next to the executable).
-//
-// A script is a Lua file that returns a table with any of init/update/draw/
-// shutdown. Files that return something else (a class, a helper module) are left
-// for other scripts to require() -- loadAll() only registers the ones that
-// actually have a hook, so the script root can hold both without any
-// bookkeeping.
-//
-// Two things stop a class from being mistaken for a scene, because the OOP Lua
-// idiom puts exactly those four names on the returned table too:
-//   * `Player.__index = Player` marks the table as a class, and a class is
-//     something a scene instantiates, not something the frame loop runs.
-//   * `Module.library = true` says so outright, for anything the first rule
-//     does not cover.
-//
-// Every call into Lua is protected. A script that throws is reported once,
-// disabled so it cannot spam the frame loop, and revived by the next reload --
-// a typo in a scene never takes the window down with it.
+//zde je manager pro skripty, ktere se budou nacitat z adresare gameplay
+//scripty se nacitaji z /gameplay folderu
+//drzime konvenci, kazdy script returnuje tabulku ktera ma funkce init,update,draw a shutdown
 class ScriptManager
 {
 public:

@@ -8,9 +8,6 @@
 
 #include <glad/gl.h>
 
-// How a texture is uploaded and sampled. Declared outside Texture because a
-// nested class's default member initializers are not usable in the enclosing
-// class's own default arguments until that class is complete.
 struct TextureOptions
 {
     bool srgb = true;
@@ -19,17 +16,9 @@ struct TextureOptions
     GLenum wrapT = GL_REPEAT;
     GLenum minFilter = GL_LINEAR_MIPMAP_LINEAR;
     GLenum magFilter = GL_LINEAR;
-    bool flipVertically = false; // glTF UVs already have their origin top-left
+    bool flipVertically = false; 
 };
 
-// A GL 2D texture with its own storage. Move-only for the same reason as Mesh
-// and Shader: the destructor deletes the name, so exactly one Texture may own
-// it. Create and destroy it while the GL context is current.
-//
-// Colour textures are uploaded as sRGB by default. The framebuffer has
-// GL_FRAMEBUFFER_SRGB enabled, so everything the shaders see stays linear and
-// the hardware handles both ends of the conversion. Data textures (normal maps,
-// roughness, masks) must pass srgb = false or they come out wrong.
 class Texture
 {
 public:

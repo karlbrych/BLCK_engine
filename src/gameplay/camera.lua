@@ -1,13 +1,6 @@
 -- gameplay/camera.lua
---
--- The scripting-side camera. All of the maths lives in EngineCamera.cpp: this
--- module owns one of those objects and wraps it in the behaviour a scene wants
--- -- orbiting a pivot, flying around, reacting to input -- so the C++ class can
--- stay a plain view/projection provider with no opinion about controls.
---
--- The module itself only exposes new(); the instance methods live on a private
--- metatable, which is also why the script manager leaves this file alone
--- instead of treating update() below as a per-frame hook.
+-- scriptova verze kamery ktera slouzi jako wrapper nad EngineCamera.cpp
+
 
 local Camera = {}
 
@@ -24,21 +17,13 @@ local function copy3(value, fallback)
         value[3] or value.z or fallback[3],
     }
 end
-
--- options:
---   position   {x, y, z}          where the camera starts
---   target     {x, y, z}          what it looks at, and the orbit pivot
---   fov        degrees            vertical field of view
---   near, far  world units        clip planes
---   mode       "orbit" | "fly"    which control scheme update() runs
---   moveSpeed  units per second  fly speed; boostKey multiplies it
 function Camera.new(options)
     options = options or {}
 
     local self = setmetatable({}, Instance)
 
     self.pivot = copy3(options.target, { 0, 0, 0 })
-    -- The C++ camera. Everything below is a thin shell over this handle.
+    --wrapper EngineCamera modulu
     self.handle = Engine.camera.new({
         position = copy3(options.position, { 3, 2, 4 }),
         target = self.pivot,
@@ -48,11 +33,11 @@ function Camera.new(options)
     })
 
     self.mode = options.mode or "orbit"
-    self.orbitSpeed = options.orbitSpeed or 90   -- degrees per second, keyboard
-    self.mouseSpeed = options.mouseSpeed or 0.25 -- degrees per pixel dragged
-    self.moveSpeed = options.moveSpeed or 4      -- world units per second
-    self.zoomSpeed = options.zoomSpeed or 5      -- world units per second
-    self.boostKey = options.boostKey or "lctrl"  -- held down to move faster
+    self.orbitSpeed = options.orbitSpeed or 90
+    self.mouseSpeed = options.mouseSpeed or 0.25
+    self.moveSpeed = options.moveSpeed or 4
+    elf.zoomSpeed = options.zoomSpeed or 5
+    elf.boostKey = options.boostKey or "lctrl"
     self.boost = options.boost or 6
 
     self.mouseX, self.mouseY = Engine.input.mouse()
@@ -61,7 +46,6 @@ function Camera.new(options)
     return self
 end
 
--- Makes this the camera the renderer feeds to every shader it binds.
 function Instance:activate()
     Engine.renderer.setCamera(self.handle)
     return self
@@ -81,7 +65,6 @@ function Instance:lookAt(x, y, z)
     return self
 end
 
--- Moves the orbit pivot and turns to face it.
 function Instance:setTarget(target)
     self.pivot = copy3(target, self.pivot)
     self.handle:lookAt(self.pivot)
@@ -108,19 +91,6 @@ function Instance:dolly(amount)
     return self
 end
 
--- Frames a loaded model: pivots on its centre and backs off far enough for the
--- whole bounding box to fit on screen, then sizes the clip planes and the
--- movement speeds to match. Without this a 1000-unit-wide map either fills the
--- screen from the inside or sits entirely behind the far plane.
---
--- The fit measures the box against both the vertical and the horizontal field
--- of view. A bounding sphere would be simpler, but a map is a wide flat plate:
--- its sphere is twice the size of anything actually on screen, and framing on
--- it leaves the map a postage stamp in the middle of the window.
---
--- options:
---   distance    multiplier on the fitted distance (default 1.05, a little margin)
---   yaw, pitch  degrees to approach from (default 45 around, 35 above)
 function Instance:frame(model, options)
     options = options or {}
 
@@ -131,25 +101,15 @@ function Instance:frame(model, options)
     local yaw = math.rad(options.yaw or 45)
     local pitch = math.rad(options.pitch or 35)
 
-    -- Where the camera will sit, as a unit vector from the pivot.
     local dirX = math.cos(pitch) * math.sin(yaw)
     local dirY = math.sin(pitch)
     local dirZ = math.cos(pitch) * math.cos(yaw)
 
-    -- The screen axes at that orientation: right is horizontal in world space,
-    -- up is whatever completes the frame.
     local rx, ry, rz = math.cos(yaw), 0, -math.sin(yaw)
     local ux = -math.sin(pitch) * math.sin(yaw)
     local uy = math.cos(pitch)
     local uz = -math.sin(pitch) * math.cos(yaw)
 
-    -- Exact fit, one corner at a time. A corner sitting `depth` in front of the
-    -- camera fits when |screenY| <= depth * tan(fov/2), and depth is itself
-    -- (distance - how far that corner leans towards the camera) -- so each
-    -- corner states the smallest distance that would contain it, and the
-    -- largest of those answers is the one to use. Doing it per corner rather
-    -- than on the box's overall extents is what keeps a wide flat plate viewed
-    -- from a shallow angle filling the window instead of shrinking into it.
     local tanHalfFov = math.tan(math.rad(self.handle:getFov()) * 0.5)
     local aspect = math.max(Engine.window.aspect(), 0.1)
 
@@ -164,7 +124,7 @@ function Instance:frame(model, options)
         local lean = ox * dirX + oy * dirY + oz * dirZ
 
         local needed = math.max(math.abs(screenY) / tanHalfFov,
-                                math.abs(screenX) / (tanHalfFov * aspect)) + lean
+            math.abs(screenX) / (tanHalfFov * aspect)) + lean
         distance = math.max(distance, needed)
     end
     distance = distance * (options.distance or 1.05)
@@ -172,9 +132,6 @@ function Instance:frame(model, options)
     self:setTarget({ cx, cy, cz })
     self.handle:setPosition(cx + dirX * distance, cy + dirY * distance, cz + dirZ * distance)
     self.handle:lookAt(cx, cy, cz)
-
-    -- A near plane too small against a far this large is what makes depth
-    -- buffers fight; scale both with the scene instead of pinning them.
     self.handle:setClipPlanes(math.max(distance * 0.001, 0.05), distance * 10)
 
     local radius = math.max(model:radius(), 0.001)
@@ -183,8 +140,6 @@ function Instance:frame(model, options)
     return self
 end
 
--- Mouse delta since the last frame. The frame a drag begins is reported as zero
--- movement, so clicking after moving the cursor does not snap the view.
 function Instance:mouseDelta()
     local x, y = Engine.input.mouse()
     local dx, dy = x - self.mouseX, y - self.mouseY
@@ -226,8 +181,6 @@ function Instance:update(dt)
         end
         return
     end
-
-    -- Orbit: arrows or A/D/W/S swing around the pivot, Q/E pull in and out.
     local yaw = axis("left", "right") + axis("a", "d")
     local pitch = axis("down", "up") + axis("s", "w")
 

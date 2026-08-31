@@ -16,18 +16,11 @@
 #include <utility>
 
 #include <GLFW/glfw3.h>
-
+//zde implementujeme nove funkce pro nase skripty ktere potrebuji pristup k enginu a dalsi vysokovykonnostni veci
 namespace fs = std::filesystem;
 
 namespace
 {
-
-// ------------------------------------------------------------ table readers
-//
-// Scripts write vectors the way that reads best at the call site, so all three
-// spellings are accepted: {1, 2, 3}, {x = 1, y = 2, z = 3}, and a bare number
-// for the uniform case (mostly scale).
-
 float readField(const sol::table& table, int index, const char* name, float fallback)
 {
     if (sol::object value = table[index]; value.is<float>())
@@ -839,6 +832,22 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
             "drawCalls", stats.drawCalls, "triangles", stats.triangles, "shaderBinds",
             stats.shaderBinds, "textureBinds", stats.textureBinds);
     };
+
+    // ---- Engine.debug ----------------------------------------------------
+    // `enabled` is false in a build configured with -DBLCK_DEBUG=OFF, and the
+    // calls below turn into no-ops. A script should branch on it rather than
+    // assume the tools are there.
+    sol::table debugTable = engine.create_named("debug");
+    debugTable["enabled"] = Renderer::debugToolsAvailable();
+    debugTable["setWireframe"] = [r](bool enabled) { r->setWireframe(enabled); };
+    debugTable["wireframe"] = [r]() { return r->wireframe(); };
+    debugTable["toggleWireframe"] = [r]()
+    {
+        r->setWireframe(!r->wireframe());
+        return r->wireframe();
+    };
+    debugTable["setWireframeColor"] = [r](sol::object color)
+    { r->setWireframeColor(toVec3(color, glm::vec3(0.35f, 1.0f, 0.55f), "r", "g", "b")); };
 
     // ---- Engine.window ---------------------------------------------------
     sol::table windowTable = engine.create_named("window");

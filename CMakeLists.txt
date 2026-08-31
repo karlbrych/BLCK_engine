@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(zero_to_hero LANGUAGES C CXX)
+project(blck_engine LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -141,6 +141,19 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /permissive-)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# ---------------------------------------------------------------- Debug tooling
+# Gates the in-engine debug rendering (wireframe today). Not called plain DEBUG:
+# that name is claimed by half the C libraries in existence, and colliding with
+# one of them is a bad afternoon. Turn it off with -DBLCK_DEBUG=OFF and the
+# setters compile away, leaving flags that can never become true.
+option(BLCK_DEBUG "Compile the in-engine debug rendering tools (wireframe)" ON)
+if(BLCK_DEBUG)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE BLCK_DEBUG)
+    message(STATUS "Debug rendering tools: enabled (BLCK_DEBUG)")
+else()
+    message(STATUS "Debug rendering tools: compiled out")
 endif()
 
 # ---------------------------------------------------------------- Optional libraries

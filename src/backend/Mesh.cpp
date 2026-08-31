@@ -11,8 +11,7 @@ namespace
 
 constexpr float kPi = 3.14159265358979323846f;
 
-// Built by hand instead of with offsetof so the code stays valid whether Vec3 is
-// glm::vec3 or the fallback struct. sizeof(Vertex) is static_asserted in the header.
+
 constexpr std::array<VertexAttribute, 3> kVertexLayout{{
     {0, 3, 0, GL_FLOAT, GL_FALSE},  // position
     {1, 3, 12, GL_FLOAT, GL_FALSE}, // normal

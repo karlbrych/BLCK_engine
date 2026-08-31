@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch zero_to_hero",
+      "name": "Launch blck_engine",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/bin/zero_to_hero",
+      "program": "${workspaceFolder}/build/bin/blck_engine",
       "args": [],
       "cwd": "${workspaceFolder}/build/bin",
       "stopAtEntry": false,
@@ -17,7 +17,7 @@
       },
       "windows": {
         "type": "cppvsdbg",
-        "program": "${workspaceFolder}/build/bin/zero_to_hero.exe"
+        "program": "${workspaceFolder}/build/bin/blck_engine.exe"
       }
     }
   ]

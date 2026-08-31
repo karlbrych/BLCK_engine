@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Engine Table &middot; blck_engine</title>
+<meta name="description" content="Reference for every Lua function the blck_engine Lua API exposes to gameplay scripts.">
+<meta name="color-scheme" content="light dark">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap">
+
+<!-- Applied before first paint, so a stored choice does not flash the other theme. -->
+<script>
+(function () {
+    try {
+        var stored = localStorage.getItem("engine-table-theme");
+        if (stored === "light" || stored === "dark") {
+            document.documentElement.setAttribute("data-theme", stored);
+        }
+    } catch (e) { /* private mode, storage disabled -- fall back to the OS setting */ }
+})();
+</script>
+
+<style>
+:root {
+    --ground:      #f7f8fb;
+    --surface:     #ffffff;
+    --surface-2:   #eef0f6;
+    --ink:         #12141c;
+    --ink-soft:    #4a4f61;
+    --ink-faint:   #767c90;
+    --rule:        #dce0ea;
+    --rule-soft:   #e8ebf2;
+    --accent:      #2d3fa8;
+    --accent-soft: #e7eaf8;
+    --type:        #0f7a6c;
+    --type-soft:   #e0f0ed;
+    --warn:        #9a6608;
+    --warn-soft:   #fbf1dd;
+    --shadow:      0 1px 2px rgba(18, 20, 28, .06);
+
+    --measure: 68ch;
+    --rail: 16.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --ground:      #0e1016;
+        --surface:     #161a24;
+        --surface-2:   #1d222e;
+        --ink:         #e4e7f0;
+        --ink-soft:    #a8aec2;
+        --ink-faint:   #7b8296;
+        --rule:        #2a3040;
+        --rule-soft:   #212634;
+        --accent:      #8f9dff;
+        --accent-soft: #1e2440;
+        --type:        #4fc7b3;
+        --type-soft:   #12302c;
+        --warn:        #e0a33c;
+        --warn-soft:   #2e2413;
+        --shadow:      0 1px 2px rgba(0, 0, 0, .4);
+    }
+}
+
+:root[data-theme="dark"] {
+    --ground:      #0e1016;
+    --surface:     #161a24;
+    --surface-2:   #1d222e;
+    --ink:         #e4e7f0;
+    --ink-soft:    #a8aec2;
+    --ink-faint:   #7b8296;
+    --rule:        #2a3040;
+    --rule-soft:   #212634;
+    --accent:      #8f9dff;
+    --accent-soft: #1e2440;
+    --type:        #4fc7b3;
+    --type-soft:   #12302c;
+    --warn:        #e0a33c;
+    --warn-soft:   #2e2413;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .4);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .sans {
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    text-wrap: balance;
+}
+
+code, pre, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.shell {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 3.5rem;
+    max-width: 78rem;
+    margin: 0 auto;
+    padding: 0 2rem 8rem;
+}
+
+/* ---------------------------------------------------------------- masthead */
+
+.masthead {
+    grid-column: 1 / -1;
+    padding: 4.5rem 0 2.25rem;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 3rem;
+}
+
+.eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .75rem;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1rem;
+}
+
+.masthead h1 {
+    font-size: clamp(2.4rem, 5.5vw, 3.6rem);
+    font-weight: 600;
+    letter-spacing: -.025em;
+    line-height: 1.05;
+    margin: 0 0 1rem;
+}
+
+.standfirst {
+    max-width: 46ch;
+    font-size: 1.13rem;
+    color: var(--ink-soft);
+    margin: 0;
+}
+
+/* ---------------------------------------------------------------- rail */
+
+.rail {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 1rem 0 3rem;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: .875rem;
+}
+
+.rail h2 {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 1.75rem 0 .6rem;
+}
+.rail h2:first-child { margin-top: 0; }
+
+.rail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rail a {
+    display: block;
+    padding: .22rem 0 .22rem .7rem;
+    border-left: 2px solid var(--rule-soft);
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+.rail a:hover { color: var(--accent); border-left-color: var(--accent); }
+.rail a code { font-size: .85em; }
+
+/* ---------------------------------------------------------------- main */
+
+main { min-width: 0; }
+
+section { margin-bottom: 4.5rem; scroll-margin-top: 1.5rem; }
+
+section > h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    margin: 0 0 .4rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+section > p, section > ul, section > ol { max-width: var(--measure); }
+
+.lede { color: var(--ink-soft); margin: 0 0 2rem; }
+
+h3.group {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 2.75rem 0 .35rem;
+    scroll-margin-top: 1.5rem;
+}
+
+h3.group + p { max-width: var(--measure); color: var(--ink-soft); margin: 0 0 1.25rem; font-size: .95rem; }
+
+/* ---------------------------------------------------------------- entries */
+
+.entry {
+    border-top: 1px solid var(--rule-soft);
+    padding: 1.1rem 0 .35rem;
+    max-width: var(--measure);
+}
+
+.sig {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .5rem .9rem;
+    margin-bottom: .45rem;
+}
+
+.sig > .name {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .95rem;
+    font-weight: 500;
+    color: var(--ink);
+}
+.sig > .name b { font-weight: 600; }
+.sig > .name .arg { color: var(--ink-faint); font-style: normal; }
+
+.chip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .04em;
+    padding: .12rem .45rem;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.chip.ret   { background: var(--type-soft); color: var(--type); }
+.chip.note  { background: var(--warn-soft); color: var(--warn); }
+.chip.init  { background: var(--accent-soft); color: var(--accent); }
+
+.entry p { margin: 0 0 .6rem; font-size: .97rem; }
+.entry p:last-child { margin-bottom: .35rem; }
+
+dl.args {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: .3rem 1rem;
+    margin: .1rem 0 .85rem;
+    font-size: .92rem;
+    align-items: baseline;
+}
+dl.args dt {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .85rem;
+    color: var(--ink);
+    white-space: nowrap;
+}
+dl.args dd { margin: 0; color: var(--ink-soft); }
+dl.args dd .def {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .85em;
+    color: var(--ink-faint);
+}
+
+/* ---------------------------------------------------------------- code */
+
+pre {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: .85rem 1rem;
+    margin: 0 0 1.1rem;
+    overflow-x: auto;
+    font-size: .855rem;
+    line-height: 1.6;
+    box-shadow: var(--shadow);
+    max-width: var(--measure);
+}
+pre code { color: var(--ink); }
+pre .c { color: var(--ink-faint); font-style: italic; }
+
+p code, li code, dd code, td code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: .08em .32em;
+    font-size: .86em;
+}
+
+/* ---------------------------------------------------------------- tables */
+
+.tablewrap { overflow-x: auto; margin: 0 0 1.5rem; max-width: var(--measure); }
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: .9rem;
+    font-variant-numeric: tabular-nums;
+}
+th, td {
+    text-align: left;
+    padding: .48rem .8rem .48rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: baseline;
+}
+th {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom-color: var(--rule);
+}
+td:first-child { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- callout */
+
+.callout {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    padding: .85rem 1.1rem;
+    margin: 0 0 1.5rem;
+    border-radius: 0 4px 4px 0;
+    max-width: var(--measure);
+}
+.callout p { margin: 0; font-size: .95rem; }
+.callout p + p { margin-top: .5rem; }
+.callout strong { font-family: "IBM Plex Sans", sans-serif; font-weight: 600; }
+
+/* ---------------------------------------------------------------- gotchas */
+
+.gotcha {
+    border-top: 1px solid var(--rule-soft);
+    padding: 1.15rem 0 .3rem;
+    max-width: var(--measure);
+}
+.gotcha h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 .5rem;
+}
+.gotcha p { margin: 0 0 .7rem; font-size: .96rem; }
+
+.wrong, .right {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .855rem;
+    padding: .5rem .8rem;
+    border-radius: 3px;
+    margin: 0 0 .4rem;
+    display: block;
+    overflow-x: auto;
+    white-space: pre;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+}
+.wrong { border-left: 3px solid #c0392b; }
+.right { border-left: 3px solid var(--type); }
+:root[data-theme="dark"] .wrong { border-left-color: #e0685c; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .wrong { border-left-color: #e0685c; }
+}
+
+footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    color: var(--ink-faint);
+    font-size: .875rem;
+}
+
+@media (max-width: 62rem) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 1.25rem 5rem; }
+    .rail {
+        position: static;
+        max-height: none;
+        border-bottom: 1px solid var(--rule);
+        margin-bottom: 2.5rem;
+        padding-bottom: 1.5rem;
+    }
+    .rail ul { display: flex; flex-flow: row wrap; gap: 0 1rem; }
+    .rail a { border-left: 0; padding-left: 0; }
+    .masthead { padding-top: 3rem; }
+}
+
+/* ---------------------------------------------------------------- reset */
+
+html { -moz-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+img, svg { max-width: 100%; height: auto; }
+
+/* ---------------------------------------------------------------- theme toggle */
+
+.masthead { position: relative; }
+
+.theme-toggle {
+    position: absolute;
+    top: 4.5rem;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .35rem .7rem;
+    background: var(--surface);
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .72rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-toggle svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+/* Each state shows the theme you would switch *to*. */
+.theme-toggle .to-light { display: none; }
+.theme-toggle .to-dark { display: inline-flex; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .theme-toggle .to-light { display: inline-flex; }
+    :root:not([data-theme="light"]) .theme-toggle .to-dark { display: none; }
+}
+:root[data-theme="dark"] .theme-toggle .to-light { display: inline-flex; }
+:root[data-theme="dark"] .theme-toggle .to-dark { display: none; }
+
+.theme-toggle span { display: inline-flex; align-items: center; gap: .4rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (max-width: 62rem) {
+    .theme-toggle { top: 3rem; }
+}
+
+@media print {
+    .rail, .theme-toggle { display: none; }
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    pre, .callout, .wrong, .right { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<header class="masthead">
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch colour theme">
+        <span class="to-dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+            Dark
+        </span>
+        <span class="to-light">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
+            Light
+        </span>
+    </button>
+    <p class="eyebrow">blck_engine &middot; gameplay scripting</p>
+    <h1>The Engine Table</h1>
+    <p class="standfirst">Everything a Lua script in <code>src/gameplay/</code> is allowed to touch, and nothing else. Scripts describe objects; C++ decides how and when to draw them.</p>
+</header>
+
+<nav class="rail" aria-label="Contents">
+    <h2>Getting started</h2>
+    <ul>
+        <li><a href="#scripts">Scripts and libraries</a></li>
+        <li><a href="#conventions">Conventions</a></li>
+    </ul>
+    <h2>Engine</h2>
+    <ul>
+        <li><a href="#log"><code>log</code></a></li>
+        <li><a href="#mesh"><code>mesh</code></a></li>
+        <li><a href="#model"><code>model</code></a></li>
+        <li><a href="#texture"><code>texture</code></a></li>
+        <li><a href="#shader"><code>shader</code></a></li>
+        <li><a href="#camera"><code>camera</code></a></li>
+        <li><a href="#renderer"><code>renderer</code></a></li>
+        <li><a href="#debug"><code>debug</code></a></li>
+        <li><a href="#window"><code>window</code></a></li>
+        <li><a href="#input"><code>input</code></a></li>
+        <li><a href="#time"><code>time</code></a></li>
+    </ul>
+    <h2>Objects</h2>
+    <ul>
+        <li><a href="#o-mesh">Mesh</a></li>
+        <li><a href="#o-model">Model</a></li>
+        <li><a href="#o-texture">Texture</a></li>
+        <li><a href="#o-shader">Shader</a></li>
+        <li><a href="#o-camera">EngineCamera</a></li>
+    </ul>
+    <h2>Lua modules</h2>
+    <ul>
+        <li><a href="#camera-lua">camera.lua</a></li>
+    </ul>
+    <h2>Reference</h2>
+    <ul>
+        <li><a href="#keys">Key names</a></li>
+        <li><a href="#gotchas">Things that bite</a></li>
+    </ul>
+</nav>
+
+<main>
+
+<!-- ============================================================ scripts -->
+<section id="scripts">
+    <h2>Scripts and libraries</h2>
+    <p class="lede">Every <code>.lua</code> file directly inside the script root is examined once at startup and again whenever anything in the directory changes.</p>
+
+    <p>A <strong>script</strong> returns a table carrying any of four hooks. The engine calls them method-style, so <code>self</code> is the script's own table &mdash; that is where a scene keeps its state.</p>
+
+<pre><code>local scene = {}
+
+function scene:init()          <span class="c">-- once, before the first frame</span>
+function scene:update(dt)      <span class="c">-- every frame, dt in seconds</span>
+function scene:draw()          <span class="c">-- every frame, after update</span>
+function scene:shutdown()      <span class="c">-- on exit, and before a reload</span>
+
+return scene</code></pre>
+
+    <p>Everything else is a <strong>library</strong>: available through <code>require("name")</code>, never run by the frame loop. A file is a library when any of these is true.</p>
+
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Condition</th><th>Why</th></tr></thead>
+        <tbody>
+            <tr><td>Returns a non-table</td><td>A helper returning a function, or nothing, has no hooks to call.</td></tr>
+            <tr><td><code>M.__index == M</code></td><td>It is a class. Its <code>init</code>/<code>update</code>/<code>draw</code> are instance methods for a scene to call on objects made with <code>M.new()</code>, not frame hooks.</td></tr>
+            <tr><td><code>M.library = true</code></td><td>Said outright, for anything the rules above miss.</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <p>Errors are caught and printed with a traceback. The offending script is disabled &mdash; it stops running rather than spamming the frame loop &mdash; and revived the moment its file changes. A typo never takes the window down.</p>
+
+    <p>Hot reload watches the file set as well as timestamps, so a script added, edited, or deleted while the app runs is picked up within half a second, <code>shutdown</code> and <code>init</code> included.</p>
+</section>
+
+<!-- ============================================================ conventions -->
+<section id="conventions">
+    <h2>Conventions</h2>
+    <p class="lede">Three rules that hold across the whole surface.</p>
+
+    <p><strong>Vectors go in three spellings.</strong> Write whichever reads best at the call site; they are all read the same way.</p>
+<pre><code>position = { 1, 2, 3 }
+position = { x = 1, y = 2, z = 3 }
+scale    = 2.0                      <span class="c">-- a bare number means all three</span>
+color    = { r = 0.9, g = 0.3, b = 0.2 }   <span class="c">-- colours use r/g/b</span></code></pre>
+
+    <p><strong>Vectors come back as three values</strong>, not a table, so they drop straight into locals.</p>
+<pre><code>local x, y, z = camera:getPosition()
+local w, h, d = model:size()</code></pre>
+
+    <p><strong>Coordinates are right-handed, Y up.</strong> The camera looks down &minus;Z at yaw 0, pitch 0. Angles are always degrees.</p>
+</section>
+
+<!-- ============================================================ log -->
+<section id="log">
+    <h2>Engine.log</h2>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.log</b>(<span class="arg">...</span>)</span></div>
+        <p>Prints its arguments to stdout behind a <code>[lua]</code> prefix, joined by tabs. Anything that <code>tostring</code> handles is accepted.</p>
+        <p>It joins; it does not format. Placeholders come out literally &mdash; wrap in <code>string.format</code> first.</p>
+    </div>
+</section>
+
+<!-- ============================================================ mesh -->
+<section id="mesh">
+    <h2>Engine.mesh</h2>
+    <p class="lede">Built-in primitives, all on the standard vertex layout: position, normal, UV.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.mesh.cube</b>(<span class="arg">size</span>)</span><span class="chip ret">Mesh</span></div>
+        <dl class="args"><dt>size</dt><dd>edge length <span class="def">= 1.0</span></dd></dl>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.mesh.quad</b>(<span class="arg">width, height</span>)</span><span class="chip ret">Mesh</span></div>
+        <dl class="args">
+            <dt>width</dt><dd><span class="def">= 1.0</span></dd>
+            <dt>height</dt><dd>defaults to <code>width</code>, so one argument gives a square</dd>
+        </dl>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.mesh.triangle</b>(<span class="arg">size</span>)</span><span class="chip ret">Mesh</span></div>
+        <dl class="args"><dt>size</dt><dd><span class="def">= 1.0</span></dd></dl>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.mesh.sphere</b>(<span class="arg">radius, rings, segments</span>)</span><span class="chip ret">Mesh</span></div>
+        <dl class="args">
+            <dt>radius</dt><dd><span class="def">= 0.5</span></dd>
+            <dt>rings</dt><dd>horizontal subdivisions <span class="def">= 16</span></dd>
+            <dt>segments</dt><dd>vertical subdivisions <span class="def">= 32</span></dd>
+        </dl>
+    </div>
+</section>
+
+<!-- ============================================================ model -->
+<section id="model">
+    <h2>Engine.model</h2>
+    <p class="lede">glTF 2.0, both <code>.gltf</code> and <code>.glb</code>. Node hierarchy, PBR base colour, and embedded or external textures.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.model.load</b>(<span class="arg">path, options</span>)</span><span class="chip ret">Model</span><span class="chip init">init() only</span></div>
+        <p>Loading is synchronous and a large map takes a moment, so it belongs in <code>init()</code>, never in <code>update()</code>. The renderer caches by path and options, so a hot reload re-uses what is already on the GPU instead of re-parsing the file.</p>
+        <dl class="args">
+            <dt>recenter</dt><dd>move the bounding-box centre to the origin <span class="def">= false</span></dd>
+            <dt>scale</dt><dd>uniform scale baked into every part <span class="def">= 1.0</span></dd>
+            <dt>generateNormals</dt><dd>flat normals for parts that ship none <span class="def">= true</span></dd>
+            <dt>textures</dt><dd>decode and upload images <span class="def">= true</span></dd>
+            <dt>verbose</dt><dd>print a summary line on load <span class="def">= true</span></dd>
+        </dl>
+<pre><code>self.map = Engine.model.load("assets/models/map/hradec_mapa.glb", {
+    recenter = true,   <span class="c">-- scanned data sits far from the origin</span>
+    scale    = 10.0,
+})</code></pre>
+        <p>Raises a Lua error the script can see if the file is missing, is not glTF, or requires an unsupported extension. Skinning, morph targets, animation, sparse accessors and Draco compression are not supported; anything else it cannot use is warned about once and skipped.</p>
+        <p><code>recenter</code> is worth reaching for on scanned or geo-referenced data: it usually sits hundreds of units from the origin, which makes every camera distance and clip plane meaningless until it is moved back.</p>
+    </div>
+</section>
+
+<!-- ============================================================ texture -->
+<section id="texture">
+    <h2>Engine.texture</h2>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.texture.load</b>(<span class="arg">path, srgb</span>)</span><span class="chip ret">Texture</span></div>
+        <p>Loads PNG, JPEG, BMP, TGA, GIF or HDR. Cached by path, mipmapped, anisotropically filtered.</p>
+        <dl class="args">
+            <dt>srgb</dt><dd><span class="def">= true</span>. Leave it on for colour. Pass <code>false</code> for data textures &mdash; normal maps, roughness, masks &mdash; or they come out wrong.</dd>
+        </dl>
+    </div>
+</section>
+
+<!-- ============================================================ shader -->
+<section id="shader">
+    <h2>Engine.shader</h2>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.shader.load</b>(<span class="arg">vertexPath, fragmentPath</span>)</span><span class="chip ret">Shader</span></div>
+        <p>Compiles, links and caches. Asking for the same pair twice returns the same shader.</p>
+<pre><code>self.shader = Engine.shader.load(
+    "assets/shaders/basic.vert",
+    "assets/shaders/basic.frag")</code></pre>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.shader.reloadAll</b>()</span><span class="chip ret">number</span></div>
+        <p>Recompiles every cached file-backed shader and returns how many succeeded. One that fails to compile keeps its old program, so a syntax error leaves the frame drawing.</p>
+    </div>
+</section>
+
+<!-- ============================================================ camera -->
+<section id="camera">
+    <h2>Engine.camera</h2>
+    <p class="lede">The raw C++ camera. Most scenes want <a href="#camera-lua"><code>camera.lua</code></a> instead, which wraps one of these in controls.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.camera.new</b>(<span class="arg">options</span>)</span><span class="chip ret">EngineCamera</span></div>
+        <dl class="args">
+            <dt>position</dt><dd><span class="def">= {0, 0, 3}</span></dd>
+            <dt>target</dt><dd>what to look at. Wins over <code>yaw</code>/<code>pitch</code> when both are given.</dd>
+            <dt>yaw, pitch</dt><dd>degrees, used only without a <code>target</code></dd>
+            <dt>fov</dt><dd>vertical field of view in degrees <span class="def">= 60</span></dd>
+            <dt>near, far</dt><dd>clip planes <span class="def">= 0.1, 500</span></dd>
+        </dl>
+        <p>Aspect ratio comes from the current window and tracks resizes on its own.</p>
+    </div>
+</section>
+
+<!-- ============================================================ renderer -->
+<section id="renderer">
+    <h2>Engine.renderer</h2>
+    <p class="lede">The one way onto the screen. A script never touches OpenGL; it queues a description and C++ draws the whole frame once every script has had its say.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.renderer.submit</b>(<span class="arg">call</span>)</span><span class="chip ret">number</span></div>
+        <p>Queues one draw call, or one per part for a model, and returns how many were queued. Call it from <code>draw()</code>.</p>
+        <p>Exactly one of <code>mesh</code> or <code>model</code> is required, and <code>shader</code> always is. A missing one is a Lua error with a traceback rather than a silent skip &mdash; a <code>submit</code> with a typo in it is a bug in the scene.</p>
+        <dl class="args">
+            <dt>mesh</dt><dd>a <a href="#o-mesh">Mesh</a></dd>
+            <dt>model</dt><dd>a <a href="#o-model">Model</a>; expands to one call per part, each with its own material and texture</dd>
+            <dt>shader</dt><dd>a <a href="#o-shader">Shader</a> &mdash; required</dd>
+            <dt>position</dt><dd><span class="def">= {0, 0, 0}</span></dd>
+            <dt>rotation</dt><dd>Euler degrees, applied yaw then pitch then roll <span class="def">= {0, 0, 0}</span></dd>
+            <dt>scale</dt><dd><span class="def">= 1.0</span></dd>
+            <dt>color</dt><dd>multiplied into the texture. <span class="def">= {0.85, 0.35, 0.25}</span> for a mesh, <span class="def">= white</span> for a model, where it acts as a tint over the material colours.</dd>
+            <dt>texture</dt><dd>a <a href="#o-texture">Texture</a>; models supply their own</dd>
+            <dt>alpha</dt><dd><span class="def">= 1.0</span>. Below 1 turns <code>blend</code> on for you.</dd>
+            <dt>blend</dt><dd>draw in the transparent pass <span class="def">= false</span></dd>
+            <dt>doubleSided</dt><dd>skip back-face culling <span class="def">= false</span></dd>
+            <dt>instances</dt><dd><span class="def">= 1</span></dd>
+            <dt>mode</dt><dd><code>"triangles"</code> <span class="def">(default)</span>, <code>"triangle_strip"</code>, <code>"lines"</code>, <code>"line_strip"</code>, <code>"line_loop"</code>, <code>"points"</code></dd>
+        </dl>
+<pre><code>function scene:draw()
+    Engine.renderer.submit({
+        model = self.map,
+        shader = self.shader,
+    })
+
+    Engine.renderer.submit({
+        mesh = self.player.mesh,
+        shader = self.shader,
+        position = { 0, self.groundY, 0 },
+        scale = self.player.size,
+        color = { 0.85, 0.35, 0.25 },
+    })
+end</code></pre>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.renderer.setCamera</b>(<span class="arg">camera</span>)</span></div>
+        <p>Sets the <a href="#o-camera">EngineCamera</a> whose matrices every shader is fed. <code>camera.lua</code> calls this from <code>activate()</code>.</p>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.renderer.clearColor</b>(<span class="arg">r, g, b, a</span>)</span></div>
+        <p>Four separate numbers, not a table. <code>a</code> defaults to 1.</p>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.renderer.stats</b>()</span><span class="chip ret">table</span></div>
+        <p>Counters for the last frame that was actually drawn: <code>drawCalls</code>, <code>triangles</code>, <code>shaderBinds</code>, <code>textureBinds</code>. Safe to read from <code>update()</code>, which runs before this frame's draw.</p>
+<pre><code>local s = Engine.renderer.stats()
+Engine.window.setTitle(string.format("%d draws | %d tris", s.drawCalls, s.triangles))</code></pre>
+    </div>
+
+    <div class="callout">
+        <p><strong>Renderer state outlives a script reload.</strong> The clear colour, the active camera and the wireframe flag all survive an edit. A scene should set what it wants in <code>init()</code> rather than assume a fresh renderer.</p>
+    </div>
+</section>
+
+<!-- ============================================================ debug -->
+<section id="debug">
+    <h2>Engine.debug</h2>
+    <p class="lede">Gated behind the <code>BLCK_DEBUG</code> CMake option, on by default. Configure with <code>-DBLCK_DEBUG=OFF</code> and the setters compile away.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.debug.enabled</b></span><span class="chip ret">boolean</span></div>
+        <p>A field, not a function. <code>false</code> in a build with the tools compiled out. Branch on it rather than calling into silent no-ops.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.debug.toggleWireframe</b>()</span><span class="chip ret">boolean</span></div>
+        <p>Flips wireframe and returns the new state.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.debug.setWireframe</b>(<span class="arg">enabled</span>)</span></div>
+        <p>Draws the frame as lines: culling off, so the far side of a model is not missing, and textures off in one flat colour, because a photo stretched over a wireframe hides exactly the topology you opened it to see.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.debug.wireframe</b>()</span><span class="chip ret">boolean</span></div>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.debug.setWireframeColor</b>(<span class="arg">color</span>)</span></div>
+        <dl class="args"><dt>color</dt><dd><span class="def">= {0.35, 1.0, 0.55}</span></dd></dl>
+    </div>
+</section>
+
+<!-- ============================================================ window -->
+<section id="window">
+    <h2>Engine.window</h2>
+    <p class="lede">All functions, including the three that read like properties.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.window.width</b>()</span><span class="chip ret">number</span></div>
+        <div class="sig"><span class="name"><b>Engine.window.height</b>()</span><span class="chip ret">number</span></div>
+        <div class="sig"><span class="name"><b>Engine.window.aspect</b>()</span><span class="chip ret">number</span></div>
+        <p>Framebuffer size in pixels, and width over height. Call them &mdash; <code>Engine.window.width</code> without parentheses is the function itself.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.window.setTitle</b>(<span class="arg">text</span>)</span></div>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.window.close</b>()</span></div>
+        <p>Asks the window to close. The frame finishes, every script's <code>shutdown</code> runs, then the app exits.</p>
+    </div>
+</section>
+
+<!-- ============================================================ input -->
+<section id="input">
+    <h2>Engine.input</h2>
+    <p class="lede">Polled, not evented: each call reports the state right now. For a one-shot action, compare against last frame yourself.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.input.key</b>(<span class="arg">name</span>)</span><span class="chip ret">boolean</span></div>
+        <p>True while the key is held. Unknown names are always false rather than an error. See <a href="#keys">key names</a>.</p>
+<pre><code><span class="c">-- edge-triggered, so holding the key does not fire every frame</span>
+local down = Engine.input.key("g")
+if down and not self.wasDown then
+    self.wireframe = Engine.debug.toggleWireframe()
+end
+self.wasDown = down</code></pre>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.input.mouse</b>()</span><span class="chip ret">x, y</span></div>
+        <p>Cursor position in pixels from the top-left of the window.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.input.mouseButton</b>(<span class="arg">n</span>)</span><span class="chip ret">boolean</span></div>
+        <p>One-based, Lua style: <code>1</code> is left, <code>2</code> right, <code>3</code> middle.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.input.setCursorLocked</b>(<span class="arg">locked</span>)</span></div>
+        <p>Hides and captures the cursor for mouse-look, or releases it.</p>
+    </div>
+</section>
+
+<!-- ============================================================ time -->
+<section id="time">
+    <h2>Engine.time</h2>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.time.now</b>()</span><span class="chip ret">number</span></div>
+        <p>Seconds since the window opened.</p>
+    </div>
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Engine.time.delta</b>()</span><span class="chip ret">number</span></div>
+        <p>Length of the last frame in seconds &mdash; the same value <code>update(dt)</code> is handed, reachable from anywhere.</p>
+    </div>
+</section>
+
+<!-- ============================================================ objects -->
+<section id="o-mesh">
+    <h2>Mesh</h2>
+    <p class="lede">Returned by <code>Engine.mesh.*</code>. Read-only from Lua; the GPU buffers belong to C++.</p>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Returns</th></tr></thead>
+        <tbody>
+            <tr><td><code>mesh:valid()</code></td><td>boolean &mdash; whether it has GPU buffers</td></tr>
+            <tr><td><code>mesh:vertexCount()</code></td><td>number</td></tr>
+            <tr><td><code>mesh:indexCount()</code></td><td>number</td></tr>
+            <tr><td><code>mesh:indexed()</code></td><td>boolean</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section id="o-model">
+    <h2>Model</h2>
+    <p class="lede">Returned by <code>Engine.model.load</code>. Bounds already account for <code>recenter</code> and <code>scale</code>.</p>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Returns</th></tr></thead>
+        <tbody>
+            <tr><td><code>model:partCount()</code></td><td>number of primitives, each a separate draw call</td></tr>
+            <tr><td><code>model:materialCount()</code></td><td>number</td></tr>
+            <tr><td><code>model:triangleCount()</code></td><td>number</td></tr>
+            <tr><td><code>model:vertexCount()</code></td><td>number</td></tr>
+            <tr><td><code>model:textureCount()</code></td><td>number of images actually uploaded</td></tr>
+            <tr><td><code>model:center()</code></td><td>x, y, z &mdash; centre of the bounding box</td></tr>
+            <tr><td><code>model:size()</code></td><td>x, y, z &mdash; its extent</td></tr>
+            <tr><td><code>model:boundsMin()</code></td><td>x, y, z</td></tr>
+            <tr><td><code>model:boundsMax()</code></td><td>x, y, z</td></tr>
+            <tr><td><code>model:radius()</code></td><td>number &mdash; bounding sphere around the centre</td></tr>
+            <tr><td><code>model:source()</code></td><td>string &mdash; the path it came from</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section id="o-texture">
+    <h2>Texture</h2>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Returns</th></tr></thead>
+        <tbody>
+            <tr><td><code>texture:valid()</code></td><td>boolean</td></tr>
+            <tr><td><code>texture:width()</code></td><td>number</td></tr>
+            <tr><td><code>texture:height()</code></td><td>number</td></tr>
+            <tr><td><code>texture:channels()</code></td><td>number &mdash; 1 to 4, as decoded</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section id="o-shader">
+    <h2>Shader</h2>
+    <p class="lede">Uniforms set here stay set until something else changes them. The renderer overwrites <code>uModel</code>, <code>uNormalMatrix</code>, <code>uBaseColor</code>, <code>uAlpha</code>, <code>uHasTexture</code> and the camera's matrices every frame, so those are not yours to hold.</p>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>
+            <tr><td><code>shader:valid()</code></td><td>boolean</td></tr>
+            <tr><td><code>shader:reload()</code></td><td>boolean &mdash; recompiles from disk; keeps the old program on failure</td></tr>
+            <tr><td><code>shader:setFloat(name, v)</code></td><td></td></tr>
+            <tr><td><code>shader:setInt(name, v)</code></td><td></td></tr>
+            <tr><td><code>shader:setVec3(name, v)</code></td><td>takes any of the three vector spellings</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section id="o-camera">
+    <h2>EngineCamera</h2>
+    <p class="lede">The C++ camera behind <code>Engine.camera.new</code>. All angles in degrees; matrices rebuild lazily, so setting the same value twice costs nothing.</p>
+
+    <h3 class="group">Placement</h3>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>
+            <tr><td><code>cam:setPosition(v)</code></td><td>a vector, or three separate numbers</td></tr>
+            <tr><td><code>cam:move(x, y, z)</code></td><td>world-space offset</td></tr>
+            <tr><td><code>cam:moveLocal(right, up, forward)</code></td><td>along the camera's own axes &mdash; what a fly control wants</td></tr>
+            <tr><td><code>cam:getPosition()</code></td><td>x, y, z</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h3 class="group">Orientation</h3>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>
+            <tr><td><code>cam:setRotation(yaw, pitch, roll)</code></td><td>roll optional, keeps its current value</td></tr>
+            <tr><td><code>cam:rotate(dYaw, dPitch, dRoll)</code></td><td>relative; roll defaults to 0</td></tr>
+            <tr><td><code>cam:lookAt(target)</code></td><td>a vector, or three separate numbers</td></tr>
+            <tr><td><code>cam:orbit(pivot, dYaw, dPitch)</code></td><td>swings around the pivot at a fixed radius</td></tr>
+            <tr><td><code>cam:dolly(pivot, amount)</code></td><td>moves toward or away; stops short of the near plane</td></tr>
+            <tr><td><code>cam:setPitchLimit(degrees)</code></td><td>stops the view flipping over at the poles</td></tr>
+            <tr><td><code>cam:forward()</code> <code>cam:right()</code> <code>cam:up()</code></td><td>x, y, z each</td></tr>
+            <tr><td><code>cam:getYaw()</code> <code>cam:getPitch()</code> <code>cam:getRoll()</code></td><td>degrees</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h3 class="group">Projection</h3>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>
+            <tr><td><code>cam:setPerspective(fov, aspect, near, far)</code></td><td></td></tr>
+            <tr><td><code>cam:setOrthographic(height, aspect, near, far)</code></td><td></td></tr>
+            <tr><td><code>cam:setFov(degrees)</code></td><td>vertical field of view</td></tr>
+            <tr><td><code>cam:setOrthoHeight(h)</code></td><td></td></tr>
+            <tr><td><code>cam:setClipPlanes(near, far)</code></td><td>keep the ratio sane or the depth buffer fights</td></tr>
+            <tr><td><code>cam:setAspect(a)</code> <code>cam:setViewport(w, h)</code></td><td></td></tr>
+            <tr><td><code>cam:setAutoAspect(bool)</code></td><td>on by default; off pins the aspect against window resizes</td></tr>
+            <tr><td><code>cam:getFov()</code> <code>cam:getAspect()</code> <code>cam:getNear()</code> <code>cam:getFar()</code></td><td></td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<!-- ============================================================ camera.lua -->
+<section id="camera-lua">
+    <h2>camera.lua</h2>
+    <p class="lede">A Lua module, not part of the <code>Engine</code> table: <code>require("camera")</code>. It owns an <a href="#o-camera">EngineCamera</a> and wraps it in controls, so the C++ class stays a plain view/projection provider with no opinion about input.</p>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Camera.new</b>(<span class="arg">options</span>)</span></div>
+        <dl class="args">
+            <dt>position</dt><dd><span class="def">= {3, 2, 4}</span></dd>
+            <dt>target</dt><dd>the orbit pivot <span class="def">= {0, 0, 0}</span></dd>
+            <dt>fov</dt><dd><span class="def">= 60</span></dd>
+            <dt>near, far</dt><dd><span class="def">= 0.1, 500</span></dd>
+            <dt>mode</dt><dd><code>"orbit"</code> <span class="def">(default)</span> or <code>"fly"</code></dd>
+            <dt>orbitSpeed</dt><dd>degrees per second on the keyboard <span class="def">= 90</span></dd>
+            <dt>mouseSpeed</dt><dd>degrees per pixel dragged <span class="def">= 0.25</span></dd>
+            <dt>moveSpeed</dt><dd>units per second in fly mode <span class="def">= 4</span></dd>
+            <dt>zoomSpeed</dt><dd>units per second on Q/E <span class="def">= 5</span></dd>
+            <dt>boostKey</dt><dd>held to move faster <span class="def">= "lctrl"</span></dd>
+            <dt>boost</dt><dd>multiplier while held <span class="def">= 6</span></dd>
+        </dl>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>camera:frame</b>(<span class="arg">model, options</span>)</span></div>
+        <p>Points the camera at a model and backs off until the whole thing fits, then sizes the clip planes and movement speeds to match. Without it a thousand-unit map is either inside-out or entirely behind the far plane.</p>
+        <p>The fit is solved per bounding-box corner against both the vertical and horizontal field of view. A bounding sphere would be simpler, but a map is a wide flat plate &mdash; its sphere is twice the size of anything on screen.</p>
+        <dl class="args">
+            <dt>yaw, pitch</dt><dd>degrees to approach from <span class="def">= 45, 35</span></dd>
+            <dt>distance</dt><dd>multiplier on the fitted distance <span class="def">= 1.05</span>. Below 1 crops.</dd>
+        </dl>
+<pre><code>self.camera = Camera.new({ fov = 55, mode = "orbit" })
+self.camera:frame(self.map, { pitch = 25 })
+self.camera:activate()</code></pre>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>camera:update</b>(<span class="arg">dt</span>)</span></div>
+        <p>Runs the control scheme for the current mode. Call it once per frame from the scene &mdash; nothing calls it for you, because <code>camera.lua</code> is a library.</p>
+        <p><strong>Orbit:</strong> drag or arrows/WASD to swing around the pivot, Q/E to pull in and out. <strong>Fly:</strong> drag to look, WASD to move, space and shift for up and down.</p>
+    </div>
+
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>
+            <tr><td><code>camera:activate()</code></td><td>makes it the renderer's camera</td></tr>
+            <tr><td><code>camera:setMode(mode)</code></td><td><code>"orbit"</code> or <code>"fly"</code></td></tr>
+            <tr><td><code>camera:setTarget(t)</code></td><td>moves the pivot and turns to face it</td></tr>
+            <tr><td><code>camera:setPosition(x, y, z)</code> <code>camera:getPosition()</code></td><td></td></tr>
+            <tr><td><code>camera:lookAt(x, y, z)</code></td><td></td></tr>
+            <tr><td><code>camera:setFov(degrees)</code></td><td></td></tr>
+            <tr><td><code>camera:orbit(dYaw, dPitch)</code> <code>camera:dolly(amount)</code></td><td>around the stored pivot</td></tr>
+            <tr><td><code>camera:mouseDelta()</code></td><td>dx, dy, dragging &mdash; the frame a drag begins reports zero, so the view does not snap</td></tr>
+            <tr><td><code>camera.handle</code></td><td>the underlying <a href="#o-camera">EngineCamera</a>, for anything not wrapped here</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<!-- ============================================================ keys -->
+<section id="keys">
+    <h2>Key names</h2>
+    <p class="lede">Passed to <code>Engine.input.key</code>. Named keys are case-insensitive; anything unrecognised reads as not pressed.</p>
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Group</th><th>Names</th></tr></thead>
+        <tbody>
+            <tr><td>Letters</td><td><code>"a"</code> &hellip; <code>"z"</code>, either case</td></tr>
+            <tr><td>Digits</td><td><code>"0"</code> &hellip; <code>"9"</code></td></tr>
+            <tr><td>Editing</td><td><code>"space"</code> <code>"enter"</code> <code>"tab"</code> <code>"backspace"</code> <code>"escape"</code></td></tr>
+            <tr><td>Arrows</td><td><code>"left"</code> <code>"right"</code> <code>"up"</code> <code>"down"</code></td></tr>
+            <tr><td>Modifiers</td><td><code>"lshift"</code> <code>"rshift"</code> <code>"lctrl"</code> <code>"rctrl"</code> <code>"lalt"</code> <code>"ralt"</code></td></tr>
+            <tr><td>Function</td><td><code>"f1"</code> &hellip; <code>"f5"</code></td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<!-- ============================================================ gotchas -->
+<section id="gotchas">
+    <h2>Things that bite</h2>
+    <p class="lede">Every one of these has already cost someone an afternoon.</p>
+
+    <div class="gotcha">
+        <h4>Engine.log joins, it does not format</h4>
+        <p>Placeholders come out as literal text with the arguments tacked on after a tab.</p>
+        <code class="wrong">Engine.log("health=%d", 100)          --&gt; health=%d    100</code>
+        <code class="right">Engine.log(string.format("health=%d", 100))</code>
+    </div>
+
+    <div class="gotcha">
+        <h4>Loader options go in one table</h4>
+        <p>A second table is just an extra argument nothing reads, and the silence looks exactly like it worked.</p>
+        <code class="wrong">Engine.model.load(path, { recenter = true }, { scale = 10 })</code>
+        <code class="right">Engine.model.load(path, { recenter = true, scale = 10 })</code>
+    </div>
+
+    <div class="gotcha">
+        <h4>Scale at load time, not at submit time</h4>
+        <p><code>camera:frame</code> fits against the model's bounds, and bounds know nothing about a scale applied when the call is submitted. Scale in the options and the camera agrees with what is drawn; scale at submit and it frames a model ten times smaller than the one on screen.</p>
+    </div>
+
+    <div class="gotcha">
+        <h4>Window queries are functions</h4>
+        <p>Without the parentheses you get the function itself, which is truthy and useless in arithmetic.</p>
+        <code class="wrong">local a = Engine.window.aspect</code>
+        <code class="right">local a = Engine.window.aspect()</code>
+    </div>
+
+    <div class="gotcha">
+        <h4>A class file never runs as a scene</h4>
+        <p>Writing <code>Player.__index = Player</code> marks the table as a class, so its <code>init</code>, <code>update</code> and <code>draw</code> belong to instances. The scene that owns the object is what drives it &mdash; nothing calls those hooks for you.</p>
+        <code class="right">function scene:update(dt) self.player:update(dt) end</code>
+        <p>And the file has to end in <code>return Player</code>, or <code>require</code> hands back <code>true</code> and the first index into it is an error.</p>
+    </div>
+
+    <div class="gotcha">
+        <h4>Don't size things off the map</h4>
+        <p>A player is however tall a player is, whatever happens to be around it. Deriving its size from <code>map:radius()</code> is what turns a person into a tower block. Pick real units and stay in them.</p>
+    </div>
+
+    <div class="gotcha">
+        <h4>Load in init(), never in update()</h4>
+        <p><code>Engine.model.load</code> and <code>Engine.texture.load</code> are synchronous. They are cached, so a stray call in <code>update()</code> will not re-read the file &mdash; but the first one still stalls the frame it happens in.</p>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <p>Generated against the bindings in <code class="mono">src/backend/ScriptManager.cpp</code>. Scripts live in <code class="mono">src/gameplay/</code> and hot-reload on save.</p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+    var root = document.documentElement;
+    var button = document.getElementById("theme-toggle");
+    if (!button) { return; }
+
+    // No attribute means "follow the OS", which is the state most visitors are in.
+    function current() {
+        var attribute = root.getAttribute("data-theme");
+        if (attribute === "dark" || attribute === "light") { return attribute; }
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    button.addEventListener("click", function () {
+        var next = current() === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        try { localStorage.setItem("engine-table-theme", next); } catch (e) {}
+    });
+})();
+</script>
+
+</body>
+</html>

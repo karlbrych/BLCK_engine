@@ -1,4 +1,4 @@
-# zero_to_hero
+# blck_engine
 
 Generated with OpenGL Project Generator.
 
@@ -34,6 +34,12 @@ Use the `release` preset instead of `default` for an optimised build.
 2. meson compile -C build
 
 ## Gameplay scripting
+
+**Full Lua API reference: [`docs/index.html`](docs/index.html)** -- every function on the
+`Engine` table, the five object types, the `camera.lua` module, and a closing section of
+the mistakes that have actually cost time here. It is a standalone page with no build
+step and no dependencies; open it from disk, or turn on GitHub Pages (Settings -> Pages
+-> Deploy from a branch -> `main` / `/docs`) to serve it. What follows is the summary.
 
 Lua scripts live in `src/gameplay/` and are linked next to the executable as
 `gameplay/` at build time, so editing one hot-reloads in the running app -- no
@@ -84,6 +90,9 @@ Scripts see one global, `Engine`. Nothing else reaches OpenGL.
 | `Engine.renderer.submit{mesh=, shader=, position=, rotation=, scale=, color=, texture=, alpha=, doubleSided=}` | queues one draw call |
 | `Engine.renderer.submit{model=, shader=, position=, ...}` | queues one call per model part, with its materials |
 | `Engine.renderer.clearColor(r, g, b)` / `.stats()` | frame setup and counters |
+| `Engine.debug.enabled` | false when the build was configured `-DBLCK_DEBUG=OFF` |
+| `Engine.debug.toggleWireframe()` / `.setWireframe(b)` / `.wireframe()` | draws the frame as lines |
+| `Engine.debug.setWireframeColor(c)` | the one colour the lines use |
 | `Engine.input.key("w")` / `.mouse()` / `.mouseButton(1)` | input |
 | `Engine.window.width/height/aspect/close/setTitle` | window |
 | `Engine.time.now()` / `.delta()` | timing |
@@ -114,6 +123,22 @@ which makes every camera distance meaningless until it is moved back.
 
 Models and textures are cached in the renderer by path, so a script hot reload
 re-uses what is already on the GPU instead of re-parsing a 50 MB file.
+
+### Debug rendering
+
+`BLCK_DEBUG` is a CMake option, on by default. It gates the in-engine debug
+tools; `-DBLCK_DEBUG=OFF` compiles their setters away, leaving flags that can
+never become true, and `Engine.debug.enabled` reports false so a script can skip
+its debug branches instead of calling into silent no-ops.
+
+Today that means wireframe: `glPolygonMode(GL_LINE)`, culling off so the far
+side of the model is not missing, textures off and one flat colour, because a
+photo stretched over a wireframe hides exactly the topology you opened it to
+see. In the boot scene, **G** toggles it.
+
+Renderer state outlives a script reload, so a scene that changes it should set
+what it wants in `init()` rather than assume a fresh renderer -- `scene.lua`
+does this for both the clear colour and the wireframe flag.
 
 ### How a frame runs
 

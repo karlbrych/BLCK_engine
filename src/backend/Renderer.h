@@ -106,6 +106,20 @@ public:
     // Drops cached models and textures nothing else still references.
     void trimCaches();
 
+    // ---- debug rendering -------------------------------------------------
+    // Draws every queued call as lines instead of filled triangles, in one flat
+    // colour: a texture stretched over a wireframe is unreadable, and the point
+    // of looking at one is to see the topology.
+    //
+    // The setters are compiled out unless BLCK_DEBUG is defined, so in a build
+    // without it the flag can never become true and flush() takes the ordinary
+    // path every time. Scripts can ask which build they are in through
+    // debugToolsAvailable(), rather than calling into a silent no-op.
+    void setWireframe(bool enabled);
+    void setWireframeColor(const glm::vec3& color);
+    [[nodiscard]] bool wireframe() const { return wireframeEnabled; }
+    [[nodiscard]] static bool debugToolsAvailable();
+
 private:
     std::vector<DrawCall> queue;
     std::shared_ptr<EngineCamera> activeCamera;
@@ -117,6 +131,8 @@ private:
     std::shared_ptr<Texture> defaultTexture;
 
     glm::vec4 clearColor{0.05f, 0.06f, 0.09f, 1.0f};
+    bool wireframeEnabled = false;
+    glm::vec3 wireframeColor{0.35f, 1.0f, 0.55f};
     int width = 0;
     int height = 0;
     Stats stats;

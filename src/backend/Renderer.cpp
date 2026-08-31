@@ -68,6 +68,29 @@ void Renderer::setClearColor(float r, float g, float b, float a)
     clearColor = glm::vec4(r, g, b, a);
 }
 
+bool Renderer::debugToolsAvailable()
+{
+#ifdef BLCK_DEBUG
+    return true;
+#else
+    return false;
+#endif
+}
+
+void Renderer::setWireframe([[maybe_unused]] bool enabled)
+{
+#ifdef BLCK_DEBUG
+    wireframeEnabled = enabled;
+#endif
+}
+
+void Renderer::setWireframeColor([[maybe_unused]] const glm::vec3& color)
+{
+#ifdef BLCK_DEBUG
+    wireframeColor = color;
+#endif
+}
+
 void Renderer::setCamera(std::shared_ptr<EngineCamera> value)
 {
     activeCamera = std::move(value);
@@ -179,6 +202,13 @@ void Renderer::flush()
                          return leftTexture < rightTexture;
                      });
 
+    // Back faces have no edges worth hiding once the fill is gone, and culling
+    // them just makes the far side of everything disappear.
+    if (wireframeEnabled)
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+
     Stats frameStats;
     GLuint boundProgram = 0;
     GLuint boundTexture = 0;
@@ -208,7 +238,7 @@ void Renderer::flush()
 
         // Double-sided materials are common in exported models, and a scanned
         // mesh with inconsistent winding is unreadable with culling left on.
-        const bool wantCulling = !call.doubleSided;
+        const bool wantCulling = !call.doubleSided && !wireframeEnabled;
         if (wantCulling != culling)
         {
             culling = wantCulling;
@@ -236,7 +266,8 @@ void Renderer::flush()
             }
         }
 
-        const std::shared_ptr<Texture>& texture = call.texture ? call.texture : defaultTexture;
+        const std::shared_ptr<Texture>& texture =
+            (call.texture && !wireframeEnabled) ? call.texture : defaultTexture;
         const GLuint textureId = texture ? texture->id() : 0;
         if (textureId != boundTexture)
         {
@@ -244,13 +275,13 @@ void Renderer::flush()
             boundTexture = textureId;
             ++frameStats.textureBinds;
         }
-        call.shader->set("uHasTexture", call.texture != nullptr);
+        call.shader->set("uHasTexture", call.texture != nullptr && !wireframeEnabled);
 
         const glm::mat4 model = call.modelMatrix();
         call.shader->set("uModel", model);
         // Inverse-transpose, so a non-uniformly scaled object still lights right.
         call.shader->set("uNormalMatrix", glm::inverseTranspose(glm::mat3(model)));
-        call.shader->set("uBaseColor", call.color);
+        call.shader->set("uBaseColor", wireframeEnabled ? wireframeColor : call.color);
         call.shader->set("uAlpha", call.alpha);
 
         call.mesh->drawInstanced(call.instances, call.mode);
@@ -267,6 +298,10 @@ void Renderer::flush()
 
     // Leave the pipeline in the state init() set up, so the next frame -- and
     // anything else drawing into this context -- starts from a known place.
+    if (wireframeEnabled)
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
     if (!culling)
     {
         glEnable(GL_CULL_FACE);
