@@ -36,8 +36,8 @@ function Camera.new(options)
     self.orbitSpeed = options.orbitSpeed or 90
     self.mouseSpeed = options.mouseSpeed or 0.25
     self.moveSpeed = options.moveSpeed or 4
-    elf.zoomSpeed = options.zoomSpeed or 5
-    elf.boostKey = options.boostKey or "lctrl"
+    self.zoomSpeed = options.zoomSpeed or 5
+    self.boostKey = options.boostKey or "lctrl"
     self.boost = options.boost or 6
 
     self.mouseX, self.mouseY = Engine.input.mouse()
