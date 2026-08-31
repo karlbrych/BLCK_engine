@@ -32,7 +32,6 @@ function Camera.new(options)
         far = options.far or 500,
     })
 
-    self.mode = options.mode or "orbit"
     self.orbitSpeed = options.orbitSpeed or 90
     self.mouseSpeed = options.mouseSpeed or 0.25
     self.moveSpeed = options.moveSpeed or 4
@@ -42,6 +41,21 @@ function Camera.new(options)
 
     self.mouseX, self.mouseY = Engine.input.mouse()
     self.dragging = false
+
+    -- Attachment state, filled in by attach().
+    self.target = nil
+    self.eyeOffset = nil
+    self.nearPlane = nil
+    self.farPlane = nil
+
+    -- The cursor mode is GLFW state: it outlives a script reload exactly the
+    -- way the renderer's does. Assert it here rather than assume a released
+    -- cursor, or an edit made while in first-person leaves the pointer trapped.
+    self.mode = nil
+    self.cursorLocked = false
+    self.lookWarm = false
+    self:setMode(options.mode or "orbit")
+    Engine.input.setCursorLocked(self.cursorLocked)
 
     return self
 end
@@ -71,8 +85,111 @@ function Instance:setTarget(target)
     return self
 end
 
+-- Switching in or out of first-person captures or releases the cursor, which is
+-- why this is not just a field assignment.
 function Instance:setMode(mode)
+    if mode == self.mode then
+        return self
+    end
     self.mode = mode
+
+    local locked = (mode == "first")
+    if locked ~= self.cursorLocked then
+        self.cursorLocked = locked
+        Engine.input.setCursorLocked(locked)
+        -- GLFW teleports the pointer when the mode changes; that jump is not a
+        -- look input, so the next delta is thrown away.
+        self.lookWarm = true
+    end
+
+    if locked then
+        if self.nearPlane and self.farPlane then
+            self.handle:setClipPlanes(self.nearPlane, self.farPlane)
+        end
+        self:snapToTarget()
+    elseif self.target then
+        self.target.visible = true
+    end
+    return self
+end
+
+-- Binds the camera to anything carrying a `position` table -- the player, but a
+-- vehicle or a spectated entity would do just as well.
+--
+-- options:
+--   eyeHeight   world units above the target's position (default 0.9 * its size)
+--   near, far   clip planes to use in first-person, reapplied on every switch
+--               back. A first-person view of a 10,000-unit map needs a far plane
+--               to match, and the near plane has to stay in proportion or the
+--               depth buffer runs out of precision.
+function Instance:attach(target, options)
+    options = options or {}
+    self.target = target
+    self.eyeOffset = options.eyeHeight
+    -- Default to whatever the camera was built with, so the planes only have to
+    -- be stated once and switching back to first-person restores them.
+    self.nearPlane = options.near or self.handle:getNear()
+    self.farPlane = options.far or self.handle:getFar()
+
+    if self.mode == "first" then
+        if self.nearPlane and self.farPlane then
+            self.handle:setClipPlanes(self.nearPlane, self.farPlane)
+        end
+        self:snapToTarget()
+    end
+    return self
+end
+
+function Instance:detach()
+    if self.target then
+        self.target.visible = true
+    end
+    self.target = nil
+    return self
+end
+
+-- Height of the eye above the target's own position.
+function Instance:eyeHeight()
+    if self.eyeOffset then
+        return self.eyeOffset
+    end
+    local size = self.target and self.target.size or 1.8
+    return size * 0.9 -- eyes sit near the top of a body, not at its middle
+end
+
+-- Plants the camera in the target's head. Hiding the target is part of the same
+-- thought: from inside your own head, your body is not something you can see,
+-- and drawing it would fill the screen with the inside of a cube.
+function Instance:snapToTarget()
+    local target = self.target
+    if not target then
+        return self
+    end
+    local p = target.position
+    self.handle:setPosition(p.x, p.y + self:eyeHeight(), p.z)
+    target.visible = false
+    return self
+end
+
+-- The look direction flattened onto the ground plane, as x, z. This is what a
+-- walking body wants: at pitch 0 forward is (sin yaw, -cos yaw) and right is
+-- (cos yaw, sin yaw), so looking up must not tip the player into the sky.
+function Instance:forwardFlat()
+    local yaw = math.rad(self.handle:getYaw())
+    return math.sin(yaw), -math.cos(yaw)
+end
+
+function Instance:rightFlat()
+    local yaw = math.rad(self.handle:getYaw())
+    return math.cos(yaw), math.sin(yaw)
+end
+
+function Instance:getYaw()
+    return self.handle:getYaw()
+end
+
+function Instance:setClipPlanes(near, far)
+    self.handle:setClipPlanes(near, far)
     return self
 end
 
@@ -149,6 +266,19 @@ function Instance:mouseDelta()
     local started = dragging and not self.dragging
     self.dragging = dragging
 
+    -- One frame is swallowed after the cursor is captured or released: GLFW
+    -- moves the pointer on the switch, and that jump is not the player looking.
+    if self.lookWarm then
+        self.lookWarm = false
+        return 0, 0, dragging
+    end
+
+    -- Captured (first-person): every movement is a look. Otherwise a look costs
+    -- a held button, and the frame a drag begins reports zero, so clicking after
+    -- moving the cursor does not snap the view.
+    if self.cursorLocked then
+        return dx, dy, dragging
+    end
     if not dragging or started then
         return 0, 0, dragging
     end
@@ -164,6 +294,17 @@ end
 
 function Instance:update(dt)
     local dx, dy, dragging = self:mouseDelta()
+
+    -- First-person: look only. Where the body goes is the body's business, and
+    -- it has already moved by the time this runs -- the scene updates the
+    -- player first, so the eye lands on this frame's position, not last one's.
+    if self.mode == "first" then
+        if dx ~= 0 or dy ~= 0 then
+            self.handle:rotate(dx * self.mouseSpeed, -dy * self.mouseSpeed)
+        end
+        self:snapToTarget()
+        return
+    end
 
     if self.mode == "fly" then
         if dragging then

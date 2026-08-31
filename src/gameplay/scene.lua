@@ -17,12 +17,24 @@ function scene:init()
 
     self.player = Player.new("KajaBrych", 100, PLAYER_HEIGHT * MAP_SCALE)
     self.player:init()
-    self.groundY = select(2, self.map:boundsMax()) + self.player.size * 0.5
 
-    self.camera = Camera.new({ fov = 55, mode = "orbit" })
-    self.camera:frame(self.map, { pitch = 25 })
+    -- No ground query yet, so the player stands on top of the map's bounding
+    -- box rather than on the terrain under its feet.
+    self.groundY = select(2, self.map:boundsMax())
+    self.player:spawn(0, self.groundY, 0)
+
+    -- A first-person view of a map this size needs clip planes to match: near
+    -- in proportion to the body, far past the whole world, and not so far apart
+    -- that the depth buffer gives up.
+    local extent = math.max(self.map:size())
+    self.camera = Camera.new({
+        fov = 70, -- wider than the overview: a first-person view wants periphery
+        mode = "first",
+        near = self.player.size * 0.1,
+        far = extent * 2.0,
+    })
+    self.camera:attach(self.player)
     self.camera:activate()
-    Engine.debug.enabled = true
     self.elapsed = 0.0
     self.spinSpeed = 35.0
     self.frames = 0
@@ -30,7 +42,7 @@ function scene:init()
 
     Engine.log(string.format("scene: %s -- %d parts, %d triangles, %d textures",
         MAP_PATH, self.map:partCount(), self.map:triangleCount(), self.map:textureCount()))
-    Engine.log("scene: drag to orbit, Q/E zoom, F toggles fly (WASD + space/shift, ctrl boosts), Esc quits")
+    Engine.log("scene: WASD walks, mouse looks, space/ctrl up and down, shift sprints, F for the overview, Esc quits")
     self.wireframe = false
     Engine.debug.setWireframe(self.wireframe)
     if Engine.debug.enabled then
@@ -42,14 +54,25 @@ end
 
 function scene:update(dt)
     self.elapsed = self.elapsed + dt
+
+    -- Player first, camera second. The camera plants itself on the player's
+    -- position, so moving the body after the eye would leave the view a frame
+    -- behind and the whole scene would swim.
+    self.player:update(dt, self.camera)
     self.camera:update(dt)
-    self.player:update(dt)
-    local flyDown = Engine.input.key("f")
-    if flyDown and not self.flyWasDown then
-        self.camera:setMode(self.camera.mode == "fly" and "orbit" or "fly")
+
+    -- F steps out of the body to look at the map, and back in again.
+    local viewDown = Engine.input.key("f")
+    if viewDown and not self.viewWasDown then
+        if self.camera.mode == "first" then
+            self.camera:setMode("orbit")
+            self.camera:frame(self.map, { pitch = 25 })
+        else
+            self.camera:setMode("first")
+        end
         Engine.log("scene: camera mode -> " .. self.camera.mode)
     end
-    self.flyWasDown = flyDown
+    self.viewWasDown = viewDown
 
     local wireDown = Engine.debug.enabled and Engine.input.key("g")
     if wireDown and not self.wireWasDown then
@@ -80,12 +103,9 @@ function scene:draw() --vykresluje pomoci submit() objekty
         shader = self.shader,
         position = { 0, 0, 0 },
     })
-    Engine.renderer.submit({
-        mesh = self.player.mesh,
-        shader = self.shader,
-        position = { self.player.position.x, self.groundY, self.player.position.z },
-        scale = self.player.size,
-    })
+    -- The player draws itself, and knows to draw nothing when the camera is
+    -- looking out of its eyes.
+    self.player:draw(self.shader)
 end
 
 function scene:shutdown()
