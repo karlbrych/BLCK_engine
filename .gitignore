@@ -1,0 +1,25 @@
+# Build artifacts
+/build*/
+/bin/
+compile_commands.json
+
+# In-source build leftovers (never commit these)
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/Makefile
+/glad_build/
+/gladsources/
+/*.a
+
+# IDE
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CMake
+CMakeUserPresets.json

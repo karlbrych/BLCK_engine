@@ -1,0 +1,23 @@
+# Flags come from build/compile_commands.json for anything in src/.
+# The Add: block below only covers headers clangd opens without a matching
+# compile command; clangd does not expand ${workspaceFolder}, so paths here
+# are relative to the build directory named above.
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - -std=c++26
+    - -Wall
+    - -Wextra
+    - -Wpedantic
+    - -Isrc
+    - -Isrc/backend
+    - -Isrc/gameplay
+    - -Iinclude
+    - -Ibuild/gladsources/glad_loader/include
+    # Must come before the default /usr/include, where Arch's lua.h is 5.5.
+    # sol2 hard-errors on any Lua newer than 5.4.
+    - -I/usr/include/lua5.4
+Diagnostics:
+  Suppress:
+    - unused-private-field
+    - unused-variable
