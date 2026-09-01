@@ -36,7 +36,7 @@ Use the `release` preset instead of `default` for an optimised build.
 ## Gameplay scripting
 
 **Full Lua API reference: [`docs/index.html`](docs/index.html)** -- every function on the
-`Engine` table, the five object types, the `camera.lua` module, and a closing section of
+`Engine` table, the five object types, the Lua modules, and a closing section of
 the mistakes that have actually cost time here. It is a standalone page with no build
 step and no dependencies; open it from disk, or turn on GitHub Pages (Settings -> Pages
 -> Deploy from a branch -> `main` / `/docs`) to serve it. What follows is the summary.
@@ -65,15 +65,28 @@ frame loop. A file is a library when any of these is true:
 Errors are caught and printed with a traceback, and the offending script is
 disabled until its file changes -- a typo never takes the window down.
 
-- `src/gameplay/camera.lua` -- orbit/fly controls around an `EngineCamera`, plus
-  `camera:frame(model)`, which fits a loaded model to the window and sizes the
-  clip planes and movement speeds to it
-- `src/gameplay/player.lua` -- a player class the scene instantiates and drives
-- `src/gameplay/scene.lua` -- the map model, the player and a camera: the scene
-  the engine boots into
+Scripts are split so that each file has one job, and are required by dotted
+path -- `require("lib.input")`, `require("entities.player")`:
 
-Drag to orbit, Q/E to zoom, F toggles fly mode (WASD, space/shift for up and
-down, ctrl to move faster), Esc to quit.
+```
+src/gameplay/
+  scene.lua              the frame script: loads the world, wires it up, little else
+  config.lua             every tunable number and key binding, in metres and seconds
+  entities/player.lua    a body: walking, gravity, standing on the ground
+  lib/camera.lua         orbit/first-person/fly controls around an EngineCamera,
+                         plus camera:frame(model), which fits a model to the window
+  lib/input.lua          input as named actions, with edge detection and axes
+  lib/class.lua          the class boilerplate, once
+  lib/devtools.lua       fps in the title bar, wireframe toggle
+```
+
+`config.lua` is the file to open first: gameplay values are written in metres and
+seconds and converted once by `unitsPerMetre`, and `config.keys` maps every
+action to a key, so nothing else in the scripts holds a speed or a key name.
+
+WASD walks, the mouse looks, space jumps, shift sprints, V toggles flying, F
+swaps to the overview camera (drag to orbit, Q/E to zoom), G toggles wireframe,
+Esc quits.
 
 ### The Engine table
 
@@ -158,7 +171,7 @@ half-drawn frame.
 - `src/backend/Model.*` -- the glTF/GLB reader, including its own JSON parser
 - `src/backend/ScriptManager.*` -- the Lua VM, the `Engine` table, hot reload
 - `src/backend/Mesh.*`, `src/backend/Shader.*`, `src/backend/Texture.*` -- GL resource wrappers
-- `src/gameplay/*.lua` -- the scripts themselves
+- `src/gameplay/*.lua` -- the scripts themselves, plus `lib/` and `entities/`
 
 ## Requirements
 - A C++ compiler and CMake 3.21 or newer.

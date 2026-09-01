@@ -1,6 +1,11 @@
--- gameplay/camera.lua
+-- gameplay/lib/camera.lua
 -- scriptova verze kamery ktera slouzi jako wrapper nad EngineCamera.cpp
+--
+-- Three modes share one object: "first" rides a target's head, "orbit" turns
+-- around a pivot, "fly" moves freely. Controls come from named actions, so what
+-- key does what lives in config.keys like everything else.
 
+local Input = require("lib.input")
 
 local Camera = {}
 
@@ -36,7 +41,6 @@ function Camera.new(options)
     self.mouseSpeed = options.mouseSpeed or 0.25
     self.moveSpeed = options.moveSpeed or 4
     self.zoomSpeed = options.zoomSpeed or 5
-    self.boostKey = options.boostKey or "lctrl"
     self.boost = options.boost or 6
 
     self.mouseX, self.mouseY = Engine.input.mouse()
@@ -285,13 +289,6 @@ function Instance:mouseDelta()
     return dx, dy, dragging
 end
 
-local function axis(negative, positive)
-    local value = 0
-    if Engine.input.key(negative) then value = value - 1 end
-    if Engine.input.key(positive) then value = value + 1 end
-    return value
-end
-
 function Instance:update(dt)
     local dx, dy, dragging = self:mouseDelta()
 
@@ -310,20 +307,20 @@ function Instance:update(dt)
         if dragging then
             self.handle:rotate(dx * self.mouseSpeed, -dy * self.mouseSpeed)
         end
-        local right = axis("a", "d")
-        local up = axis("lshift", "space")
-        local forward = axis("s", "w")
+        local right = Input.axis("moveLeft", "moveRight")
+        local up = Input.axis("moveDown", "moveUp")
+        local forward = Input.axis("moveBack", "moveForward")
         if right ~= 0 or up ~= 0 or forward ~= 0 then
             local speed = self.moveSpeed * dt
-            if Engine.input.key(self.boostKey) then
+            if Input.down("sprint") then
                 speed = speed * self.boost
             end
             self.handle:moveLocal(right * speed, up * speed, forward * speed)
         end
         return
     end
-    local yaw = axis("left", "right") + axis("a", "d")
-    local pitch = axis("down", "up") + axis("s", "w")
+    local yaw = Input.axis("orbitLeft", "orbitRight")
+    local pitch = Input.axis("orbitDown", "orbitUp")
 
     yaw = yaw * self.orbitSpeed * dt
     pitch = pitch * self.orbitSpeed * dt
@@ -337,10 +334,10 @@ function Instance:update(dt)
         self.handle:orbit(self.pivot, yaw, pitch)
     end
 
-    local zoom = axis("e", "q")
+    local zoom = Input.axis("zoomOut", "zoomIn")
     if zoom ~= 0 then
         local speed = self.zoomSpeed * dt
-        if Engine.input.key(self.boostKey) then
+        if Input.down("sprint") then
             speed = speed * self.boost
         end
         self.handle:dolly(self.pivot, zoom * speed)

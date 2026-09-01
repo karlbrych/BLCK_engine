@@ -494,11 +494,36 @@ void ScriptManager::reloadAll()
 
     // Modules cache themselves in package.loaded, so an edited camera.lua would
     // otherwise keep serving the version require() saw first.
+    //
+    // Keyed the way require() was called, which for a file in a subdirectory is
+    // the dotted path relative to the root -- require("lib.input") caches under
+    // "lib.input", not under "input". Clearing only the stem would leave every
+    // module outside the top level frozen at whatever the first load saw, and
+    // the reload would look like it had worked.
     sol::table loaded = (*lua)["package"]["loaded"];
     for (const auto& [path, stamp] : watched)
     {
         (void)stamp;
         loaded[path.stem().string()] = sol::lua_nil;
+
+        std::error_code error;
+        fs::path relative = fs::relative(path, scriptRoot, error);
+        if (error)
+        {
+            continue;
+        }
+        relative.replace_extension();
+        std::string module = relative.generic_string();
+        std::replace(module.begin(), module.end(), '/', '.');
+        loaded[module] = sol::lua_nil;
+
+        // package.path also resolves require("thing") to thing/init.lua.
+        if (relative.filename() == "init" && relative.has_parent_path())
+        {
+            std::string package = relative.parent_path().generic_string();
+            std::replace(package.begin(), package.end(), '/', '.');
+            loaded[package] = sol::lua_nil;
+        }
     }
 
     // A script that is already disabled gets no shutdown: whatever broke it
@@ -588,6 +613,51 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
         {
             const glm::vec3& v = self.boundsMax();
             return std::make_tuple(v.x, v.y, v.z);
+        },
+
+        // ---- collision ----
+        "hasCollision", &Model::hasCollision,                //
+        "collisionTriangleCount", &Model::collisionTriangleCount,
+
+        // Height of the ground under (x, z), or nil where there is none: off
+        // the edge of the map, or over a hole in the mesh. fromY caps the
+        // search, so a body cannot be pulled up onto a roof it is standing
+        // under.
+        "groundHeight",
+        [](const Model& self, float x, float z,
+           sol::optional<float> fromY) -> sol::optional<float>
+        {
+            const std::optional<float> y =
+                fromY ? self.groundHeight(x, z, *fromY) : self.groundHeight(x, z);
+            if (!y)
+            {
+                return sol::nullopt;
+            }
+            return *y;
+        },
+
+        // model:raycast(ox, oy, oz, dx, dy, dz [, maxDistance]) -> hit or nil,
+        // where hit is { x, y, z, distance, normal = { x, y, z } }. A table
+        // rather than eight return values: a miss is then a plain nil test.
+        "raycast",
+        [](const Model& self, float ox, float oy, float oz, float dx, float dy, float dz,
+           sol::optional<float> maxDistance, sol::this_state state) -> sol::object
+        {
+            ModelRayHit hit;
+            if (!self.raycast(glm::vec3(ox, oy, oz), glm::vec3(dx, dy, dz),
+                              maxDistance.value_or(0.0f), &hit))
+            {
+                return sol::nil;
+            }
+            sol::state_view L(state);
+            sol::table out = L.create_table();
+            out["x"] = hit.position.x;
+            out["y"] = hit.position.y;
+            out["z"] = hit.position.z;
+            out["distance"] = hit.distance;
+            out["normal"] = L.create_table_with("x", hit.normal.x, "y", hit.normal.y, "z",
+                                                hit.normal.z);
+            return out;
         });
 
     L.new_usertype<Shader>(
@@ -759,6 +829,7 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
                 (*options)["generateNormals"].get_or(loadOptions.generateNormals);
             loadOptions.loadTextures = (*options)["textures"].get_or(loadOptions.loadTextures);
             loadOptions.verbose = (*options)["verbose"].get_or(loadOptions.verbose);
+            loadOptions.collision = (*options)["collision"].get_or(loadOptions.collision);
         }
         return r->loadModel(path, loadOptions);
     };

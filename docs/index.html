@@ -516,7 +516,11 @@ img, svg { max-width: 100%; height: auto; }
     </ul>
     <h2>Lua modules</h2>
     <ul>
-        <li><a href="#camera-lua">camera.lua</a></li>
+        <li><a href="#layout">Script layout</a></li>
+        <li><a href="#config-lua">config.lua</a></li>
+        <li><a href="#input-lua">lib/input.lua</a></li>
+        <li><a href="#class-lua">lib/class.lua</a></li>
+        <li><a href="#camera-lua">lib/camera.lua</a></li>
     </ul>
     <h2>Reference</h2>
     <ul>
@@ -634,6 +638,7 @@ local w, h, d = model:size()</code></pre>
             <dt>generateNormals</dt><dd>flat normals for parts that ship none <span class="def">= true</span></dd>
             <dt>textures</dt><dd>decode and upload images <span class="def">= true</span></dd>
             <dt>verbose</dt><dd>print a summary line on load <span class="def">= true</span></dd>
+            <dt>collision</dt><dd>keep the triangles on the CPU so the model can be raycast <span class="def">= true</span></dd>
         </dl>
 <pre><code>self.map = Engine.model.load("assets/models/map/hradec_mapa.glb", {
     recenter = true,   <span class="c">-- scanned data sits far from the origin</span>
@@ -641,6 +646,7 @@ local w, h, d = model:size()</code></pre>
 })</code></pre>
         <p>Raises a Lua error the script can see if the file is missing, is not glTF, or requires an unsupported extension. Skinning, morph targets, animation, sparse accessors and Draco compression are not supported; anything else it cannot use is warned about once and skipped.</p>
         <p><code>recenter</code> is worth reaching for on scanned or geo-referenced data: it usually sits hundreds of units from the origin, which makes every camera distance and clip plane meaningless until it is moved back.</p>
+        <p><code>collision</code> costs about 36 bytes per triangle and a moment of load time to index; turn it off for a model nothing has to stand on or shoot at. It is what <code>model:groundHeight</code> and <code>model:raycast</code> read.</p>
     </div>
 </section>
 
@@ -722,10 +728,11 @@ local w, h, d = model:size()</code></pre>
         shader = self.shader,
     })
 
+    local p = self.player.position
     Engine.renderer.submit({
         mesh = self.player.mesh,
         shader = self.shader,
-        position = { 0, self.groundY, 0 },
+        position = { p.x, p.y, p.z },
         scale = self.player.size,
         color = { 0.85, 0.35, 0.25 },
     })
@@ -878,8 +885,32 @@ self.wasDown = down</code></pre>
             <tr><td><code>model:boundsMax()</code></td><td>x, y, z</td></tr>
             <tr><td><code>model:radius()</code></td><td>number &mdash; bounding sphere around the centre</td></tr>
             <tr><td><code>model:source()</code></td><td>string &mdash; the path it came from</td></tr>
+            <tr><td><code>model:hasCollision()</code></td><td>boolean &mdash; false when loaded with <code>collision = false</code></td></tr>
+            <tr><td><code>model:collisionTriangleCount()</code></td><td>number</td></tr>
         </tbody>
     </table>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>model:groundHeight</b>(<span class="arg">x, z, fromY</span>)</span><span class="chip ret">number or nil</span></div>
+        <p>Height of the highest surface at <code>(x, z)</code> that is at or below <code>fromY</code>, which defaults to just above the model. <code>nil</code> where there is nothing underfoot: past the edge of the map, or over a hole in the mesh.</p>
+        <p>Pass <code>fromY</code> as the feet plus whatever counts as a step, and a body climbs kerbs without ever being yanked up onto a roof it is walking under. It is one downward ray against a uniform grid over XZ, so calling it once or twice per frame per character costs nothing worth measuring.</p>
+<pre><code><span class="c">-- one body, standing on the terrain rather than on the bounding box</span>
+local ground = self.map:groundHeight(p.x, p.z, p.y + stepHeight)
+if ground and p.y - ground &lt;= stepHeight then
+    p.y = ground
+end</code></pre>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>model:raycast</b>(<span class="arg">ox, oy, oz, dx, dy, dz, maxDistance</span>)</span><span class="chip ret">table or nil</span></div>
+        <p>Closest hit along the ray, or <code>nil</code> for a miss. The direction need not be normalised; <code>maxDistance</code> defaults to unbounded. Triangles are two-sided and the returned normal always faces back along the ray, because geometry out of a scan is not reliably wound one way.</p>
+<pre><code>local hit = self.map:raycast(x, y, z, fx, fy, fz, 500)
+if hit then
+    <span class="c">-- hit.x, hit.y, hit.z, hit.distance, hit.normal.x/.y/.z</span>
+    Engine.log(string.format("hit at %.1f units", hit.distance))
+end</code></pre>
+        <div class="callout"><p><strong>Both read the model's own coordinates.</strong> A model drawn at an offset with <code>position</code> in <code>submit</code> is walked on where it is <em>not</em> drawn &mdash; keep a map that carries collision at the origin, or subtract the offset yourself before querying.</p></div>
     </div>
 </section>
 
@@ -967,10 +998,102 @@ self.wasDown = down</code></pre>
     </div>
 </section>
 
+<!-- ============================================================ layout -->
+<section id="layout">
+    <h2>Script layout</h2>
+    <p class="lede">Everything under <code>src/gameplay/</code> is scanned on load and on save. A file is a <em>scene</em> if it returns a table with <code>init</code>, <code>update</code>, <code>draw</code> or <code>shutdown</code> &mdash; the engine calls those every frame. Everything else is a library the scenes <code>require</code>.</p>
+
+<pre><code>gameplay/
+  scene.lua              <span class="c">-- the frame script: loads, wires, and little else</span>
+  config.lua             <span class="c">-- every tunable number and key binding</span>
+  entities/player.lua    <span class="c">-- a body: movement, gravity, standing on ground</span>
+  lib/camera.lua         <span class="c">-- controls around an EngineCamera</span>
+  lib/input.lua          <span class="c">-- actions, edge detection, axes</span>
+  lib/class.lua          <span class="c">-- the class boilerplate, once</span>
+  lib/devtools.lua       <span class="c">-- fps in the title bar, wireframe toggle</span></code></pre>
+
+    <p>Subdirectories are required by dotted path &mdash; <code>require("lib.input")</code>, <code>require("entities.player")</code> &mdash; and hot-reload the same as a file at the top level.</p>
+
+    <div class="callout"><p><strong>A library with an <code>update</code> would be mistaken for a scene</strong> and run as a frame script. Set <code>library = true</code> on the returned table to opt out. A class built with <code>lib/class.lua</code> needs no flag: <code>__index</code> pointing at itself already tells the engine those are instance methods, not hooks.</p></div>
+</section>
+
+<!-- ============================================================ config.lua -->
+<section id="config-lua">
+    <h2>config.lua</h2>
+    <p class="lede">One table of numbers and key bindings, required by everything else. Nothing outside it holds a speed, a height or a key name, so changing how the game feels never means reading the logic.</p>
+
+    <p>Gameplay values are written in <strong>metres and seconds</strong>. The map is modelled in metres and scaled on load, so <code>unitsPerMetre</code> is the one conversion, applied when an object is built and never thought about again. Write <code>gravity = 9.81</code>, not <code>98.1</code>.</p>
+
+<pre><code>config.unitsPerMetre = 10.0
+
+config.player = {
+    height     = 1.8,   <span class="c">-- m</span>
+    walkSpeed  = 4.0,   <span class="c">-- m/s</span>
+    gravity    = 9.81,  <span class="c">-- m/s^2</span>
+    jumpHeight = 0.6,   <span class="c">-- m, the apex of a standing jump</span>
+    stepHeight = 0.5,   <span class="c">-- m, what counts as a kerb and not a wall</span>
+}</code></pre>
+</section>
+
+<!-- ============================================================ input.lua -->
+<section id="input-lua">
+    <h2>lib/input.lua</h2>
+    <p class="lede">Input as <em>actions</em> rather than keys, plus the edge detection every toggle needs. <code>require("lib.input")</code>.</p>
+
+    <p>Bind once from <code>config.keys</code>, then call <code>update()</code> at the top of the scene's frame so everything below reads one consistent snapshot. A binding may be a single key or a list, in which case any of them counts.</p>
+
+<pre><code>local Input = require("lib.input")
+
+function scene:init()
+    Input.bind(config.keys)   <span class="c">-- { jump = "space", orbitLeft = { "left", "a" }, ... }</span>
+end
+
+function scene:update(dt)
+    Input.update()            <span class="c">-- first, before anything reads</span>
+    if Input.pressed("quit") then Engine.window.close() end
+end</code></pre>
+
+    <div class="tablewrap">
+    <table>
+        <thead><tr><th>Function</th><th>Returns</th></tr></thead>
+        <tbody>
+            <tr><td><code>Input.bind(keymap)</code></td><td>binds actions to keys, seeding both frames of state</td></tr>
+            <tr><td><code>Input.update()</code></td><td>samples every bound action once</td></tr>
+            <tr><td><code>Input.down(action)</code></td><td>boolean &mdash; held right now</td></tr>
+            <tr><td><code>Input.pressed(action)</code></td><td>boolean &mdash; went down <em>this</em> frame, and only this frame</td></tr>
+            <tr><td><code>Input.released(action)</code></td><td>boolean &mdash; came up this frame</td></tr>
+            <tr><td><code>Input.axis(negative, positive)</code></td><td>-1, 0 or +1 &mdash; holding both is a standstill</td></tr>
+            <tr><td><code>Input.keyFor(action)</code></td><td>string &mdash; for help text that cannot drift from the bindings</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <p><code>Input.pressed</code> is the point of the module: a toggle read with <a href="#input"><code>Engine.input.key</code></a> fires every frame the key is held, so each one used to carry its own <code>wasDown</code> field to compare against. That bookkeeping now happens once, for every action.</p>
+</section>
+
+<!-- ============================================================ class.lua -->
+<section id="class-lua">
+    <h2>lib/class.lua</h2>
+    <p class="lede">The three lines every class was repeating. <code>require("lib.class")</code> returns a function that makes one.</p>
+
+<pre><code>local class = require("lib.class")
+local Player = class("Player")
+
+function Player.new(spec)
+    return setmetatable({ health = spec.health }, Player)
+end
+
+function Player:update(dt) end   <span class="c">-- an instance method, not a frame hook</span>
+
+return Player</code></pre>
+
+    <p>The <code>__index</code> it sets is also how the engine tells a class from a scene, so a class made this way is never mistaken for something to run every frame.</p>
+</section>
+
 <!-- ============================================================ camera.lua -->
 <section id="camera-lua">
-    <h2>camera.lua</h2>
-    <p class="lede">A Lua module, not part of the <code>Engine</code> table: <code>require("camera")</code>. It owns an <a href="#o-camera">EngineCamera</a> and wraps it in controls, so the C++ class stays a plain view/projection provider with no opinion about input.</p>
+    <h2>lib/camera.lua</h2>
+    <p class="lede">A Lua module, not part of the <code>Engine</code> table: <code>require("lib.camera")</code>. It owns an <a href="#o-camera">EngineCamera</a> and wraps it in controls, so the C++ class stays a plain view/projection provider with no opinion about input.</p>
 
     <div class="entry">
         <div class="sig"><span class="name"><b>Camera.new</b>(<span class="arg">options</span>)</span></div>
@@ -984,8 +1107,7 @@ self.wasDown = down</code></pre>
             <dt>mouseSpeed</dt><dd>degrees per pixel dragged <span class="def">= 0.25</span></dd>
             <dt>moveSpeed</dt><dd>units per second in fly mode <span class="def">= 4</span></dd>
             <dt>zoomSpeed</dt><dd>units per second on Q/E <span class="def">= 5</span></dd>
-            <dt>boostKey</dt><dd>held to move faster <span class="def">= "lctrl"</span></dd>
-            <dt>boost</dt><dd>multiplier while held <span class="def">= 6</span></dd>
+            <dt>boost</dt><dd>multiplier while the <code>sprint</code> action is held <span class="def">= 6</span></dd>
         </dl>
     </div>
 
@@ -997,14 +1119,16 @@ self.wasDown = down</code></pre>
             <dt>yaw, pitch</dt><dd>degrees to approach from <span class="def">= 45, 35</span></dd>
             <dt>distance</dt><dd>multiplier on the fitted distance <span class="def">= 1.05</span>. Below 1 crops.</dd>
         </dl>
-<pre><code>self.camera = Camera.new({ fov = 55, mode = "orbit" })
+<pre><code>local Camera = require("lib.camera")
+
+self.camera = Camera.new({ fov = 55, mode = "orbit" })
 self.camera:frame(self.map, { pitch = 25 })
 self.camera:activate()</code></pre>
     </div>
 
     <div class="entry">
         <div class="sig"><span class="name"><b>camera:update</b>(<span class="arg">dt</span>)</span></div>
-        <p>Runs the control scheme for the current mode. Call it once per frame from the scene &mdash; nothing calls it for you, because <code>camera.lua</code> is a library.</p>
+        <p>Runs the control scheme for the current mode. Call it once per frame from the scene &mdash; nothing calls it for you, because <code>lib/camera.lua</code> is a library.</p>
         <p><strong>Orbit:</strong> drag or arrows/WASD to swing around the pivot, Q/E to pull in and out. <strong>Fly:</strong> drag to look, WASD to move, space and shift for up and down.</p>
     </div>
 

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,6 +55,20 @@ struct ModelOptions
     bool loadTextures = true;
     // Printed to stdout as the file is read.
     bool verbose = true;
+    // Keeps a CPU-side copy of the triangles, indexed by a uniform grid, so the
+    // model can be raycast. Off for anything a script never has to stand on or
+    // shoot at: the copy costs 36 bytes per triangle.
+    bool collision = true;
+};
+
+// Where a ray met the collision geometry. distance is along the (normalised)
+// ray direction, so position == origin + direction * distance.
+struct ModelRayHit
+{
+    float distance = 0.0f;
+    glm::vec3 position{0.0f};
+    glm::vec3 normal{0.0f, 1.0f, 0.0f};
+    std::size_t triangle = 0;
 };
 
 // A loaded glTF 2.0 / GLB file: flattened parts, their materials, and the
@@ -87,11 +103,33 @@ public:
     // Radius of the bounding sphere around center().
     [[nodiscard]] float radius() const;
 
+    // ---- collision ----
+    // Present only when the model was loaded with options.collision.
+    [[nodiscard]] bool hasCollision() const { return !collisionVertices.empty(); }
+    [[nodiscard]] std::size_t collisionTriangleCount() const { return collisionVertices.size() / 3; }
+
+    // Closest hit along the ray, or false for a miss. direction need not be
+    // normalised; maxDistance <= 0 means unbounded. Triangles are two-sided,
+    // because terrain exported from a scan is not reliably wound one way.
+    [[nodiscard]] bool raycast(const glm::vec3& origin, const glm::vec3& direction,
+                               float maxDistance = 0.0f, ModelRayHit* hit = nullptr) const;
+
+    // Height of the highest surface at (x, z) that is at or below fromY, which
+    // defaults to just above the model. Empty where nothing is underfoot -- a
+    // hole in the mesh, or a point off the edge of the map.
+    [[nodiscard]] std::optional<float> groundHeight(float x, float z,
+                                                    std::optional<float> fromY = {}) const;
+
     [[nodiscard]] std::size_t vertexCount() const { return vertices; }
     [[nodiscard]] std::size_t triangleCount() const { return triangles; }
     [[nodiscard]] std::size_t textureCount() const { return textures; }
 
 private:
+    // Fills the triangle soup and the grid that indexes it. Called once, after
+    // the part transforms are final, so the triangles are in model space and a
+    // query needs no matrix work.
+    void buildCollision(std::vector<glm::vec3> triangleVertices);
+
     std::vector<ModelPart> modelParts;
     std::vector<ModelMaterial> modelMaterials;
     std::string sourcePath;
@@ -100,4 +138,17 @@ private:
     std::size_t vertices = 0;
     std::size_t triangles = 0;
     std::size_t textures = 0;
+
+    // Collision geometry: three vertices per triangle, in model space.
+    std::vector<glm::vec3> collisionVertices;
+    // A uniform grid over XZ -- cells are infinite columns in Y, which suits a
+    // map that is wide and flat and a ground query that always points down.
+    // CSR layout: gridStart[cell]..gridStart[cell + 1] indexes gridItems, whose
+    // entries are triangle indices.
+    std::vector<std::uint32_t> gridStart;
+    std::vector<std::uint32_t> gridItems;
+    glm::vec2 gridMin{0.0f};
+    glm::vec2 gridCell{1.0f};
+    int gridX = 0;
+    int gridZ = 0;
 };

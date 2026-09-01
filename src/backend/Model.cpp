@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <charconv>
 #include <cstdint>
 #include <cstring>
@@ -736,6 +737,9 @@ private:
     std::set<std::string> warned;
 
 public:
+    // Parallel to the parts vector: one entry per part, three vertices per
+    // triangle, still in that part's own space.
+    std::vector<std::vector<glm::vec3>> partTriangles;
     glm::vec3 minBounds{std::numeric_limits<float>::max()};
     glm::vec3 maxBounds{std::numeric_limits<float>::lowest()};
     std::size_t vertices = 0;
@@ -1315,6 +1319,24 @@ void GltfLoader::readPrimitive(const Json& primitive, const glm::mat4& transform
         return;
     }
 
+    if (options.collision)
+    {
+        // Local space for now: recenter and scale are folded into the part
+        // transforms after the whole file is read, and the collision triangles
+        // have to be baked with the final matrix, not this one.
+        std::vector<glm::vec3> local;
+        local.reserve(indices.size());
+        for (const std::uint32_t index : indices)
+        {
+            local.push_back(glm::vec3(vertexData[index].position));
+        }
+        partTriangles.push_back(std::move(local));
+    }
+    else
+    {
+        partTriangles.emplace_back();
+    }
+
     ModelPart part;
     part.name = std::string(meshName);
     part.transform = transform;
@@ -1499,6 +1521,299 @@ float Model::radius() const
     return glm::length(size()) * 0.5f;
 }
 
+namespace
+{
+
+// Möller-Trumbore, two-sided. Returns the distance along a normalised dir at
+// which the ray crosses the triangle, or nothing for a miss.
+std::optional<float> rayTriangle(const glm::vec3& origin, const glm::vec3& dir, const glm::vec3& a,
+                                 const glm::vec3& b, const glm::vec3& c)
+{
+    constexpr float epsilon = 1e-7f;
+    const glm::vec3 edge1 = b - a;
+    const glm::vec3 edge2 = c - a;
+    const glm::vec3 pvec = glm::cross(dir, edge2);
+    const float determinant = glm::dot(edge1, pvec);
+    if (std::fabs(determinant) < epsilon)
+    {
+        return std::nullopt; // parallel to the plane, or a degenerate triangle
+    }
+
+    const float inverse = 1.0f / determinant;
+    const glm::vec3 tvec = origin - a;
+    const float u = glm::dot(tvec, pvec) * inverse;
+    if (u < 0.0f || u > 1.0f)
+    {
+        return std::nullopt;
+    }
+
+    const glm::vec3 qvec = glm::cross(tvec, edge1);
+    const float v = glm::dot(dir, qvec) * inverse;
+    if (v < 0.0f || u + v > 1.0f)
+    {
+        return std::nullopt;
+    }
+
+    const float t = glm::dot(edge2, qvec) * inverse;
+    return t >= 0.0f ? std::optional<float>(t) : std::nullopt;
+}
+
+} // namespace
+
+void Model::buildCollision(std::vector<glm::vec3> triangleVertices)
+{
+    collisionVertices = std::move(triangleVertices);
+    gridStart.clear();
+    gridItems.clear();
+    gridX = 0;
+    gridZ = 0;
+
+    const std::size_t triangleCount = collisionVertices.size() / 3;
+    if (triangleCount == 0)
+    {
+        collisionVertices.clear();
+        return;
+    }
+
+    glm::vec2 low(std::numeric_limits<float>::max());
+    glm::vec2 high(std::numeric_limits<float>::lowest());
+    for (const glm::vec3& vertex : collisionVertices)
+    {
+        low = glm::min(low, glm::vec2(vertex.x, vertex.z));
+        high = glm::max(high, glm::vec2(vertex.x, vertex.z));
+    }
+
+    // Around four triangles per cell: enough that a ground query touches a
+    // handful of them, without a cell array larger than the geometry itself.
+    const auto side = static_cast<int>(std::sqrt(static_cast<double>(triangleCount) / 4.0));
+    gridX = std::clamp(side, 1, 512);
+    gridZ = gridX;
+
+    // A hair of padding keeps a vertex exactly on the far edge inside the last
+    // cell, and gives a flat (zero-extent) axis a usable cell size.
+    const glm::vec2 extent = glm::max(high - low, glm::vec2(1e-3f));
+    gridMin = low - extent * 0.001f;
+    gridCell = (extent * 1.002f) / glm::vec2(static_cast<float>(gridX), static_cast<float>(gridZ));
+
+    const auto cellRange = [&](std::size_t triangle)
+    {
+        const glm::vec3& a = collisionVertices[triangle * 3];
+        const glm::vec3& b = collisionVertices[triangle * 3 + 1];
+        const glm::vec3& c = collisionVertices[triangle * 3 + 2];
+        const float minX = std::min({a.x, b.x, c.x});
+        const float maxX = std::max({a.x, b.x, c.x});
+        const float minZ = std::min({a.z, b.z, c.z});
+        const float maxZ = std::max({a.z, b.z, c.z});
+        return std::array<int, 4>{
+            std::clamp(static_cast<int>((minX - gridMin.x) / gridCell.x), 0, gridX - 1),
+            std::clamp(static_cast<int>((maxX - gridMin.x) / gridCell.x), 0, gridX - 1),
+            std::clamp(static_cast<int>((minZ - gridMin.y) / gridCell.y), 0, gridZ - 1),
+            std::clamp(static_cast<int>((maxZ - gridMin.y) / gridCell.y), 0, gridZ - 1)};
+    };
+
+    // Counting pass, then a prefix sum, then a filling pass: one allocation for
+    // the whole index instead of a vector per cell.
+    const std::size_t cells = static_cast<std::size_t>(gridX) * static_cast<std::size_t>(gridZ);
+    gridStart.assign(cells + 1, 0);
+    for (std::size_t triangle = 0; triangle < triangleCount; ++triangle)
+    {
+        const auto [x0, x1, z0, z1] = cellRange(triangle);
+        for (int z = z0; z <= z1; ++z)
+        {
+            for (int x = x0; x <= x1; ++x)
+            {
+                ++gridStart[static_cast<std::size_t>(z) * gridX + x + 1];
+            }
+        }
+    }
+    for (std::size_t cell = 0; cell < cells; ++cell)
+    {
+        gridStart[cell + 1] += gridStart[cell];
+    }
+
+    std::vector<std::uint32_t> cursor(gridStart.begin(), gridStart.end() - 1);
+    gridItems.resize(gridStart.back());
+    for (std::size_t triangle = 0; triangle < triangleCount; ++triangle)
+    {
+        const auto [x0, x1, z0, z1] = cellRange(triangle);
+        for (int z = z0; z <= z1; ++z)
+        {
+            for (int x = x0; x <= x1; ++x)
+            {
+                gridItems[cursor[static_cast<std::size_t>(z) * gridX + x]++] =
+                    static_cast<std::uint32_t>(triangle);
+            }
+        }
+    }
+}
+
+bool Model::raycast(const glm::vec3& origin, const glm::vec3& direction, float maxDistance,
+                    ModelRayHit* hit) const
+{
+    if (!hasCollision() || gridX <= 0)
+    {
+        return false;
+    }
+    const float length = glm::length(direction);
+    if (length < 1e-8f)
+    {
+        return false;
+    }
+    const glm::vec3 dir = direction / length;
+    const float limit = maxDistance > 0.0f ? maxDistance : std::numeric_limits<float>::max();
+
+    // Clip to the grid's footprint first. The cells are columns, so only X and
+    // Z bound the ray -- a shot from far above the map still enters at t > 0.
+    const glm::vec2 high = gridMin + glm::vec2(static_cast<float>(gridX) * gridCell.x,
+                                               static_cast<float>(gridZ) * gridCell.y);
+    const std::array<float, 2> from{origin.x, origin.z};
+    const std::array<float, 2> along{dir.x, dir.z};
+    const std::array<float, 2> low{gridMin.x, gridMin.y};
+    const std::array<float, 2> top{high.x, high.y};
+    float enter = 0.0f;
+    float exit = limit;
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        if (std::fabs(along[axis]) < 1e-9f)
+        {
+            if (from[axis] < low[axis] || from[axis] > top[axis])
+            {
+                return false; // runs parallel to the grid and outside it
+            }
+            continue;
+        }
+        float near = (low[axis] - from[axis]) / along[axis];
+        float far = (top[axis] - from[axis]) / along[axis];
+        if (near > far)
+        {
+            std::swap(near, far);
+        }
+        enter = std::max(enter, near);
+        exit = std::min(exit, far);
+        if (enter > exit)
+        {
+            return false;
+        }
+    }
+
+    const glm::vec3 entry = origin + dir * enter;
+    int cellX = std::clamp(static_cast<int>((entry.x - gridMin.x) / gridCell.x), 0, gridX - 1);
+    int cellZ = std::clamp(static_cast<int>((entry.z - gridMin.y) / gridCell.y), 0, gridZ - 1);
+
+    // Standard grid walk: the distance to the next cell boundary on each axis,
+    // and how much further each whole cell costs.
+    const int stepX = dir.x > 0.0f ? 1 : (dir.x < 0.0f ? -1 : 0);
+    const int stepZ = dir.z > 0.0f ? 1 : (dir.z < 0.0f ? -1 : 0);
+    const float never = std::numeric_limits<float>::max();
+    float nextX = never;
+    float nextZ = never;
+    float spanX = never;
+    float spanZ = never;
+    if (stepX != 0)
+    {
+        const float boundary = gridMin.x + static_cast<float>(cellX + (stepX > 0 ? 1 : 0)) * gridCell.x;
+        nextX = (boundary - origin.x) / dir.x;
+        spanX = gridCell.x / std::fabs(dir.x);
+    }
+    if (stepZ != 0)
+    {
+        const float boundary = gridMin.y + static_cast<float>(cellZ + (stepZ > 0 ? 1 : 0)) * gridCell.y;
+        nextZ = (boundary - origin.z) / dir.z;
+        spanZ = gridCell.y / std::fabs(dir.z);
+    }
+
+    ModelRayHit best;
+    best.distance = exit;
+    bool found = false;
+    while (true)
+    {
+        const std::size_t cell = static_cast<std::size_t>(cellZ) * gridX + cellX;
+        for (std::uint32_t i = gridStart[cell]; i < gridStart[cell + 1]; ++i)
+        {
+            const std::size_t triangle = gridItems[i];
+            const glm::vec3& a = collisionVertices[triangle * 3];
+            const glm::vec3& b = collisionVertices[triangle * 3 + 1];
+            const glm::vec3& c = collisionVertices[triangle * 3 + 2];
+            const std::optional<float> t = rayTriangle(origin, dir, a, b, c);
+            if (t && *t <= best.distance)
+            {
+                best.distance = *t;
+                best.position = origin + dir * *t;
+                best.triangle = triangle;
+                const glm::vec3 normal = glm::cross(b - a, c - a);
+                best.normal = glm::length(normal) > 1e-12f ? glm::normalize(normal)
+                                                           : glm::vec3(0.0f, 1.0f, 0.0f);
+                found = true;
+            }
+        }
+
+        // A triangle straddling a boundary can be found early from a cell it
+        // only overlaps, so only stop once the hit is inside the cell just
+        // walked -- nothing further along can beat it then.
+        const float cellExit = std::min({nextX, nextZ, exit});
+        if (found && best.distance <= cellExit)
+        {
+            break;
+        }
+        if (nextX <= nextZ)
+        {
+            if (stepX == 0 || nextX > exit)
+            {
+                break;
+            }
+            cellX += stepX;
+            if (cellX < 0 || cellX >= gridX)
+            {
+                break;
+            }
+            nextX += spanX;
+        }
+        else
+        {
+            if (stepZ == 0 || nextZ > exit)
+            {
+                break;
+            }
+            cellZ += stepZ;
+            if (cellZ < 0 || cellZ >= gridZ)
+            {
+                break;
+            }
+            nextZ += spanZ;
+        }
+    }
+
+    if (found && hit != nullptr)
+    {
+        // Point the normal back at the ray: which way a two-sided triangle is
+        // wound says nothing about which side was hit.
+        if (glm::dot(best.normal, dir) > 0.0f)
+        {
+            best.normal = -best.normal;
+        }
+        *hit = best;
+    }
+    return found;
+}
+
+std::optional<float> Model::groundHeight(float x, float z, std::optional<float> fromY) const
+{
+    if (!hasCollision())
+    {
+        return std::nullopt;
+    }
+    // Straight down from above the caller's feet. Starting a touch higher than
+    // asked keeps a body already resting exactly on a face from falling through
+    // it, which floating point otherwise makes a coin toss.
+    const float top = fromY.value_or(maxBounds.y) + 1e-3f;
+    ModelRayHit hit;
+    if (!raycast(glm::vec3(x, top, z), glm::vec3(0.0f, -1.0f, 0.0f), 0.0f, &hit))
+    {
+        return std::nullopt;
+    }
+    return hit.position.y;
+}
+
 std::shared_ptr<Model> Model::loadFromFile(const fs::path& path, const Options& options)
 {
     auto model = std::make_shared<Model>();
@@ -1536,6 +1851,27 @@ std::shared_ptr<Model> Model::loadFromFile(const fs::path& path, const Options& 
         model->maxBounds = (model->maxBounds + offset) * options.scale;
     }
 
+    if (options.collision)
+    {
+        std::size_t total = 0;
+        for (const std::vector<glm::vec3>& part : loader.partTriangles)
+        {
+            total += part.size();
+        }
+        std::vector<glm::vec3> baked;
+        baked.reserve(total);
+        const std::size_t count = std::min(loader.partTriangles.size(), model->modelParts.size());
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            const glm::mat4& partTransform = model->modelParts[i].transform;
+            for (const glm::vec3& vertex : loader.partTriangles[i])
+            {
+                baked.push_back(glm::vec3(partTransform * glm::vec4(vertex, 1.0f)));
+            }
+        }
+        model->buildCollision(std::move(baked));
+    }
+
     if (options.verbose)
     {
         const glm::vec3 extent = model->size();
@@ -1544,6 +1880,11 @@ std::shared_ptr<Model> Model::loadFromFile(const fs::path& path, const Options& 
                   << model->modelMaterials.size() << " material(s), " << model->textures
                   << " texture(s), size " << extent.x << " x " << extent.y << " x " << extent.z
                   << '\n';
+        if (model->hasCollision())
+        {
+            std::cout << "Model: collision grid " << model->gridX << " x " << model->gridZ
+                      << " cells over " << model->collisionTriangleCount() << " triangles\n";
+        }
     }
 
     return model;
