@@ -57,6 +57,42 @@ glm::vec3 readVec3(const sol::table& source, const char* key, const glm::vec3& f
     return toVec3(source[key], fallback);
 }
 
+// GLFW delivers the wheel as events, not as state: a script polling once a
+// frame would miss every notch that arrived between two polls, so they are
+// added up here and Engine.input.scroll() drains the total. One accumulator for
+// the process is enough -- the engine runs exactly one window.
+double scrollAccumulator = 0.0;
+
+void onScroll(GLFWwindow*, double, double yOffset)
+{
+    scrollAccumulator += yOffset;
+}
+
+// An unknown name falls back rather than throwing, the way toDrawMode does: a
+// typo in a pass name should not take the frame down.
+DrawCall::Pass toPass(const sol::object& value, DrawCall::Pass fallback)
+{
+    if (!value.is<std::string>())
+    {
+        return fallback;
+    }
+
+    const std::string name = value.as<std::string>();
+    if (name == "background")
+    {
+        return DrawCall::Pass::Background;
+    }
+    if (name == "overlay")
+    {
+        return DrawCall::Pass::Overlay;
+    }
+    if (name == "world")
+    {
+        return DrawCall::Pass::World;
+    }
+    return fallback;
+}
+
 GLenum toDrawMode(const sol::object& value)
 {
     if (!value.is<std::string>())
@@ -735,9 +771,11 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
         "getYaw", &EngineCamera::getYaw,       //
         "getPitch", &EngineCamera::getPitch,   //
         "getRoll", &EngineCamera::getRoll,     //
-        "getFov", &EngineCamera::getFov,       //
-        "getAspect", &EngineCamera::getAspect, //
-        "getNear", &EngineCamera::getNear,     //
+        "getFov", &EngineCamera::getFov,                     //
+        "getOrthoHeight", &EngineCamera::getOrthoHeight,     //
+        "isOrthographic", &EngineCamera::isOrthographic,     //
+        "getAspect", &EngineCamera::getAspect,               //
+        "getNear", &EngineCamera::getNear,                   //
         "getFar", &EngineCamera::getFar);
 
     sol::table engine = L.create_named_table("Engine");
@@ -856,20 +894,34 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
     rendererTable["submit"] = [r](sol::table call)
     {
         DrawCall out;
+        // A fullscreen pass brings its own geometry from gl_VertexID, so it is
+        // the one kind of submit that needs neither a mesh nor a model.
+        const bool fullscreen = call["fullscreen"].get_or(false);
         // Reported as a Lua error rather than quietly dropped: a submit() with a
         // typo in it is a bug in the scene, and silence would hide it.
         sol::optional<std::shared_ptr<Model>> model = call["model"];
         sol::optional<std::shared_ptr<Mesh>> mesh = call["mesh"];
         sol::optional<std::shared_ptr<Shader>> shader = call["shader"];
-        if ((!model || !*model) && (!mesh || !*mesh))
+        if (!fullscreen && (!model || !*model) && (!mesh || !*mesh))
         {
-            throw std::runtime_error("Engine.renderer.submit: needs a 'mesh' or a 'model'");
+            throw std::runtime_error(
+                "Engine.renderer.submit: needs a 'mesh' or a 'model' (or fullscreen = true)");
         }
         if (!shader || !*shader)
         {
             throw std::runtime_error("Engine.renderer.submit: 'shader' must be a shader");
         }
         out.shader = *shader;
+        out.fullscreen = fullscreen;
+        // A fullscreen pass is a background unless it says otherwise: that is
+        // what a sky is, and an effect meant to sit on top can ask for one.
+        out.pass = toPass(call["pass"],
+                          fullscreen ? DrawCall::Pass::Background : DrawCall::Pass::World);
+        if (fullscreen)
+        {
+            r->submit(std::move(out));
+            return 1;
+        }
         out.position = readVec3(call, "position", glm::vec3(0.0f));
         out.rotation = readVec3(call, "rotation", glm::vec3(0.0f));
         out.scale = toVec3(call["scale"], glm::vec3(1.0f));
@@ -925,6 +977,11 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
     windowTable["width"] = [r]() { return r->viewportWidth(); };
     windowTable["height"] = [r]() { return r->viewportHeight(); };
     windowTable["aspect"] = [r]() { return r->aspect(); };
+    // Whether the window has the keyboard. Anything that reads the pointer's
+    // resting place rather than its movement -- edge panning, above all -- has
+    // to ask, or a cursor left near the edge of an unfocused window keeps
+    // driving the game.
+    windowTable["focused"] = [w]() { return glfwGetWindowAttrib(w, GLFW_FOCUSED) == GLFW_TRUE; };
     windowTable["close"] = [w]() { glfwSetWindowShouldClose(w, GLFW_TRUE); };
     windowTable["setTitle"] = [w](const std::string& title)
     { glfwSetWindowTitle(w, title.c_str()); };
@@ -946,6 +1003,16 @@ void ScriptManager::installEngineTable(Renderer& activeRenderer, GLFWwindow* act
     input["mouseButton"] = [w](int button)
     {
         return glfwGetMouseButton(w, button - 1) == GLFW_PRESS; // 1-based, Lua style
+    };
+    // Notches since the last call, positive away from the user. Reading clears
+    // it, so exactly one caller per frame should ask -- lib/input.lua does, and
+    // hands the value to everything else along with the rest of the snapshot.
+    glfwSetScrollCallback(w, onScroll);
+    input["scroll"] = []()
+    {
+        const double total = scrollAccumulator;
+        scrollAccumulator = 0.0;
+        return total;
     };
     input["setCursorLocked"] = [w](bool locked)
     { glfwSetInputMode(w, GLFW_CURSOR, locked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL); };

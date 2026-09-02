@@ -67,7 +67,15 @@ public:
     [[nodiscard]] bool fileBacked() const { return !files.empty(); }
 
     // -1 for a name the linker optimised away; looked up once, then cached.
+    // Warns the first time a name is missing, because setting a uniform that is
+    // not there is usually a typo.
     [[nodiscard]] GLint location(std::string_view name) const;
+
+    // Whether the program declares (and kept) this uniform, asked without the
+    // warning. For uniforms the engine offers rather than requires: a shader is
+    // free to use the camera matrices, the inverses, both or neither, and only
+    // what it declares gets written.
+    [[nodiscard]] bool has(std::string_view name) const;
 
     void set(std::string_view name, bool value) const;
     void set(std::string_view name, int value) const;

@@ -80,6 +80,14 @@ src/gameplay/
   lib/devtools.lua       fps in the title bar, wireframe toggle
 ```
 
+The sky is a **fullscreen pass**: `submit({ shader = sky, fullscreen = true })`
+draws a screen-covering triangle built inside the vertex shader from
+`gl_VertexID`, with no mesh and no model matrix. Passes are drawn in a fixed
+order -- `background`, `world`, `overlay` -- and the background and overlay ones
+are not depth-tested, so a sky can never occlude the scene. A shader is given
+`invView`/`invProjection` when it declares them, which is how the sky rebuilds a
+view ray for every pixel; see `assets/shaders/skybox.frag`.
+
 `config.lua` is the file to open first: gameplay values are written in metres and
 seconds and converted once by `unitsPerMetre`, and `config.keys` maps every
 action to a key, so nothing else in the scripts holds a speed or a key name.

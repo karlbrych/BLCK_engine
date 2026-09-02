@@ -42,6 +42,26 @@ struct DrawCall
     // carry the node transform they were exported with.
     glm::mat4 preTransform{1.0f};
 
+    // Where in the frame this is drawn. The world pass is depth-tested against
+    // everything else in it; background and overlay are not tested at all, so a
+    // sky can never occlude the scene and a HUD can never be occluded by it.
+    // Ordering between passes is absolute -- the sort below cannot reshuffle a
+    // background in front of the world the way it reorders within a pass.
+    enum class Pass
+    {
+        Background = 0,
+        World = 1,
+        Overlay = 2,
+    };
+    Pass pass = Pass::World;
+
+    // A fullscreen pass carries no geometry: the vertex shader builds a
+    // triangle covering the screen out of gl_VertexID alone (see
+    // assets/shaders/universal-fullscreen.vert), so there is no mesh to bind,
+    // no model matrix worth sending and no material to speak of. The camera
+    // uniforms -- the inverses especially -- are the whole input.
+    bool fullscreen = false;
+
     [[nodiscard]] glm::mat4 modelMatrix() const;
 };
 
@@ -129,6 +149,9 @@ private:
     // Bound wherever a draw call has no texture of its own, so the fragment
     // shader can always sample instead of branching on a uniform.
     std::shared_ptr<Texture> defaultTexture;
+    // Core profile refuses to draw with no vertex array bound, even when the
+    // vertex shader reads no attributes at all. This is that empty binding.
+    GLuint fullscreenVao = 0;
 
     glm::vec4 clearColor{0.05f, 0.06f, 0.09f, 1.0f};
     bool wireframeEnabled = false;

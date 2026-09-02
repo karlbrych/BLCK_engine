@@ -18,7 +18,11 @@ function scene:init()
     Input.bind(config.keys)
     Engine.renderer.clearColor(table.unpack(config.window.clearColor))
 
-    self.shader = Engine.shader.load(config.shader.vertex, config.shader.fragment)
+    self.shader = Engine.shader.load(config.shaders.world.vertex, config.shaders.world.fragment)
+    -- The sky is a fullscreen pass: no geometry, no model matrix. It rebuilds a
+    -- view ray per pixel from the camera's inverse matrices, which the renderer
+    -- hands to any shader declaring invView/invProjection.
+    self.skyShader = Engine.shader.load(config.shaders.sky.vertex, config.shaders.sky.fragment)
     self.map = Engine.model.load(config.map.path, {
         recenter = config.map.recenter,
         scale = config.unitsPerMetre,
@@ -48,16 +52,58 @@ function scene:init()
 
     local extent = math.max(self.map:size())
     self.camera = Camera.new({
-        mode = "first",
         fov = config.camera.fov,
         near = config.camera.near * config.unitsPerMetre,
         far = extent * config.camera.farScale,
     })
+    -- Attached even though the strategy view does not use it: the attachment is
+    -- what makes stepping into first-person a keypress rather than a rebuild.
     self.camera:attach(self.player, { eyeHeight = self.player.eyeHeight })
+    self:overhead()
     self.camera:activate()
 
     Devtools.init(config.window.title)
     self:logControls()
+end
+
+-- Puts the camera over the map: centred on it, held inside its edges, and
+-- zoomed by the map's own size rather than by a number that would only suit
+-- this one. The ground extent, not the height, is what the view is measured
+-- against -- a tall building on a small map should not zoom the camera out.
+function scene:overhead()
+    local sizeX, _, sizeZ = self.map:size()
+    local minX, _, minZ = self.map:boundsMin()
+    local maxX, _, maxZ = self.map:boundsMax()
+    local centerX, centerY, centerZ = self.map:center()
+
+    local ground = self.map:hasCollision() and self.map:groundHeight(centerX, centerZ) or centerY
+    local extent = math.max(sizeX, sizeZ)
+    local rts = config.rts
+
+    Engine.log(string.format("DBG map center=%.1f,%.1f,%.1f min=%.1f,%.1f max=%.1f,%.1f extent=%.1f ground=%.1f",
+        centerX, centerY, centerZ, minX, minZ, maxX, maxZ, extent, ground))
+    self.camera:rts({
+        center = { centerX, ground, centerZ },
+        bounds = { minX, minZ, maxX, maxZ },
+        extent = extent,
+
+        yaw = rts.yaw,
+        pitch = rts.pitch,
+
+        height = extent * rts.height,
+        minHeight = extent * rts.minHeight,
+        maxHeight = extent * rts.maxHeight,
+
+        panSpeed = rts.panSpeed,
+        boost = rts.boost,
+        zoomSpeed = rts.zoomSpeed,
+        wheelStep = rts.wheelStep,
+
+        edgePan = rts.edgePan,
+        edgeMargin = rts.edgeMargin,
+        padding = rts.padding,
+    })
+    return self
 end
 
 function scene:logControls()
@@ -67,10 +113,13 @@ function scene:logControls()
     -- Built from the bindings rather than written out, so the help can never
     -- describe keys the game no longer answers to.
     Engine.log(string.format(
-        "scene: %s%s%s%s walks, mouse looks, %s jumps, %s sprints, %s flies, %s overview, %s quits",
-        Input.keyFor("moveForward"), Input.keyFor("moveLeft"), Input.keyFor("moveBack"),
-        Input.keyFor("moveRight"), Input.keyFor("jump"), Input.keyFor("sprint"),
-        Input.keyFor("toggleFly"), Input.keyFor("toggleView"), Input.keyFor("quit")))
+        "scene: %s%s%s%s or the screen edge pans, wheel or %s/%s zooms, right-drag grabs the map",
+        Input.keyFor("panForward"), Input.keyFor("panLeft"), Input.keyFor("panBack"),
+        Input.keyFor("panRight"), Input.keyFor("zoomIn"), Input.keyFor("zoomOut")))
+    Engine.log(string.format(
+        "scene: %s drops into the body (mouse looks, %s jumps, %s sprints, %s flies), %s quits",
+        Input.keyFor("toggleView"), Input.keyFor("jump"), Input.keyFor("sprint"),
+        Input.keyFor("toggleFly"), Input.keyFor("quit")))
     Engine.log(string.format("player: name=%s, health=%d, standing at y=%.2f on %d collision triangles",
         self.player.name, self.player.health, self.player.position.y,
         self.map:collisionTriangleCount()))
@@ -83,21 +132,28 @@ function scene:update(dt)
     -- Player before camera: the camera plants itself on the player's position,
     -- so moving the body after the eye would leave the view a frame behind and
     -- the whole scene would swim.
-    self.player:update(dt, self.camera)
+    --
+    -- Only inside the body do the movement keys belong to it -- from overhead
+    -- they pan the camera, and driving both with one W would walk the player
+    -- off across the map every time the view moved. Gravity is not input, so it
+    -- keeps running either way and the body stays on the ground it is standing
+    -- on.
+    if self.camera.mode == "first" then
+        self.player:update(dt, self.camera)
+    elseif self.map:hasCollision() then
+        self.player:fall(dt)
+    end
     if self.player.position.y < self.fallLimit then
         self.player:spawn(self.spawnPoint.x, nil, self.spawnPoint.z)
         Engine.log("scene: fell off the map -- back to the spawn point")
     end
     self.camera:update(dt)
 
-    -- Step out of the body to look at the map, and back in again.
+    -- Step into the body to look around from inside it, and back out to the
+    -- map. The strategy view keeps where it was looking, so coming back out
+    -- lands where you left rather than at the middle of the map again.
     if Input.pressed("toggleView") then
-        if self.camera.mode == "first" then
-            self.camera:setMode("orbit")
-            self.camera:frame(self.map, { pitch = config.camera.overviewPitch })
-        else
-            self.camera:setMode("first")
-        end
+        self.camera:setMode(self.camera.mode == "first" and "rts" or "first")
         Engine.log("scene: camera mode -> " .. self.camera.mode)
     end
 
@@ -109,6 +165,13 @@ function scene:update(dt)
 end
 
 function scene:draw() --vykresluje pomoci submit() objekty
+    -- Submitted first for readability only: the background pass is drawn before
+    -- the world whatever order the calls arrive in.
+    Engine.renderer.submit({
+        shader = self.skyShader,
+        fullscreen = true,
+    })
+
     Engine.renderer.submit({
         model = self.map,
         shader = self.shader,

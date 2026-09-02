@@ -15,6 +15,7 @@ local Input = { library = true }
 local binds = {}
 local down = {}
 local previous = {}
+local scrollDelta = 0
 
 local function readKey(bound)
     if bound == nil then
@@ -37,6 +38,8 @@ end
 function Input.bind(keymap)
     binds = keymap or {}
     down, previous = {}, {}
+    Engine.input.scroll() -- drop whatever was rolled before the scene existed
+    scrollDelta = 0
     for action in pairs(binds) do
         local state = readKey(binds[action])
         down[action] = state
@@ -53,6 +56,10 @@ function Input.update()
         previous[action] = down[action]
         down[action] = readKey(bound)
     end
+    -- The wheel is drained here and nowhere else. Reading it clears the
+    -- engine's accumulator, so a second reader would find it empty and a
+    -- script that forgot to read would lose notches to the next frame.
+    scrollDelta = Engine.input.scroll()
     return Input
 end
 
@@ -75,6 +82,12 @@ function Input.axis(negative, positive)
     if Input.down(negative) then value = value - 1 end
     if Input.down(positive) then value = value + 1 end
     return value
+end
+
+-- Wheel notches this frame, positive away from the user. Not an action: there
+-- is only one wheel, and nothing to rebind it to.
+function Input.scroll()
+    return scrollDelta
 end
 
 -- For help text, so what is printed cannot drift from what is bound.

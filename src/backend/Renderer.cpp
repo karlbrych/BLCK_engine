@@ -36,6 +36,13 @@ void Renderer::init()
     // A shader that always samples is simpler than one that branches, so an
     // untextured draw call gets a 1x1 white texture instead of a special case.
     defaultTexture = std::make_shared<Texture>(Texture::white());
+
+    // Nothing is ever stored in it. A fullscreen pass reads no attributes, but
+    // the core profile still insists on a bound vertex array to draw at all.
+    if (fullscreenVao == 0)
+    {
+        glCreateVertexArrays(1, &fullscreenVao);
+    }
 }
 
 void Renderer::setViewport(int newWidth, int newHeight)
@@ -109,7 +116,11 @@ void Renderer::beginFrame()
 
 void Renderer::submit(DrawCall call)
 {
-    if (!call.mesh || !call.mesh->valid() || call.instances <= 0)
+    // A fullscreen pass is the one call with no mesh of its own: its three
+    // vertices come out of gl_VertexID inside the vertex shader, so there is
+    // nothing here to check but the shader flush() already insists on.
+    const bool hasGeometry = call.fullscreen || (call.mesh && call.mesh->valid());
+    if (!hasGeometry || call.instances <= 0)
     {
         return; // dropping a bad call beats a GL error every frame
     }
@@ -123,6 +134,11 @@ void Renderer::discard()
 
 void Renderer::shutdown()
 {
+    if (fullscreenVao != 0)
+    {
+        glDeleteVertexArrays(1, &fullscreenVao);
+        fullscreenVao = 0;
+    }
     queue.clear();
     shaderCache.clear();
     modelCache.clear();
@@ -181,12 +197,19 @@ void Renderer::flush()
         activeCamera->setAspect(aspect());
     }
 
-    // Opaque first, then by program, then by texture. The opaque/blended split
-    // is what makes transparency come out right at all; the rest turns a scene
-    // of many objects into one bind per shader and per texture.
+    // Pass first, then opaque before blended, then by program, then by texture.
+    // The pass split is the one the others must not cross: a sky sorted in with
+    // the world by program id would land in front of half of it. The
+    // opaque/blended split is what makes transparency come out right at all;
+    // the rest turns a scene of many objects into one bind per shader and per
+    // texture.
     std::stable_sort(queue.begin(), queue.end(),
                      [](const DrawCall& a, const DrawCall& b)
                      {
+                         if (a.pass != b.pass)
+                         {
+                             return a.pass < b.pass;
+                         }
                          if (a.blend != b.blend)
                          {
                              return !a.blend;
@@ -214,9 +237,20 @@ void Renderer::flush()
     GLuint boundTexture = 0;
     bool culling = true;
     bool blending = false;
+    bool depthTesting = true;
     for (const DrawCall& call : queue)
     {
         if (!call.shader || !call.shader->valid())
+        {
+            continue;
+        }
+        if (!call.fullscreen && !call.mesh)
+        {
+            continue; // nothing to draw and nothing to build one from
+        }
+        // A sky drawn as three lines across the screen is noise, and the point
+        // of a wireframe is to see the geometry against an empty background.
+        if (call.fullscreen && wireframeEnabled)
         {
             continue;
         }
@@ -232,13 +266,34 @@ void Renderer::flush()
                 activeCamera->apply(*call.shader);
             }
             // The sampler binding lives in the program, not in the GL state, so
-            // it has to be pointed at unit 0 again for every program.
-            call.shader->set("uBaseColorTexture", 0);
+            // it has to be pointed at unit 0 again for every program -- when the
+            // program has one at all, which a fullscreen effect need not.
+            if (call.shader->has("uBaseColorTexture"))
+            {
+                call.shader->set("uBaseColorTexture", 0);
+            }
+        }
+
+        // Background and overlay are not depth-tested, so a sky sits behind
+        // everything without writing depth (a disabled test writes none) and a
+        // HUD sits in front of it.
+        const bool wantDepth = call.pass == DrawCall::Pass::World;
+        if (wantDepth != depthTesting)
+        {
+            depthTesting = wantDepth;
+            if (depthTesting)
+            {
+                glEnable(GL_DEPTH_TEST);
+            }
+            else
+            {
+                glDisable(GL_DEPTH_TEST);
+            }
         }
 
         // Double-sided materials are common in exported models, and a scanned
         // mesh with inconsistent winding is unreadable with culling left on.
-        const bool wantCulling = !call.doubleSided && !wireframeEnabled;
+        const bool wantCulling = !call.doubleSided && !call.fullscreen && !wireframeEnabled;
         if (wantCulling != culling)
         {
             culling = wantCulling;
@@ -264,6 +319,17 @@ void Renderer::flush()
                 glDisable(GL_BLEND);
                 glDepthMask(GL_TRUE);
             }
+        }
+
+        // No mesh, no material, no transform: three vertices out of gl_VertexID
+        // and whatever the camera uniforms say.
+        if (call.fullscreen)
+        {
+            glBindVertexArray(fullscreenVao);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            ++frameStats.drawCalls;
+            ++frameStats.triangles;
+            continue;
         }
 
         const std::shared_ptr<Texture>& texture =
@@ -310,6 +376,10 @@ void Renderer::flush()
     {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
+    }
+    if (!depthTesting)
+    {
+        glEnable(GL_DEPTH_TEST);
     }
 
     glBindVertexArray(0);

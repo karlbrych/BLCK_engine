@@ -44,10 +44,12 @@ public:
     [[nodiscard]] float getPitch() const { return pitch; }
     [[nodiscard]] float getRoll() const { return roll; }
     [[nodiscard]] float getFov() const { return fov; }
+    [[nodiscard]] float getOrthoHeight() const { return orthoHeight; }
     [[nodiscard]] float getAspect() const { return aspect; }
     [[nodiscard]] float getNear() const { return nearPlane; }
     [[nodiscard]] float getFar() const { return farPlane; }
     [[nodiscard]] Projection getProjectionMode() const { return mode; }
+    [[nodiscard]] bool isOrthographic() const { return mode == Projection::Orthographic; }
 
     [[nodiscard]] glm::vec3 forward() const;
     [[nodiscard]] glm::vec3 right() const;

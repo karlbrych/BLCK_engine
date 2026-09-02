@@ -706,7 +706,7 @@ local w, h, d = model:size()</code></pre>
     <div class="entry">
         <div class="sig"><span class="name"><b>Engine.renderer.submit</b>(<span class="arg">call</span>)</span><span class="chip ret">number</span></div>
         <p>Queues one draw call, or one per part for a model, and returns how many were queued. Call it from <code>draw()</code>.</p>
-        <p>Exactly one of <code>mesh</code> or <code>model</code> is required, and <code>shader</code> always is. A missing one is a Lua error with a traceback rather than a silent skip &mdash; a <code>submit</code> with a typo in it is a bug in the scene.</p>
+        <p>Exactly one of <code>mesh</code> or <code>model</code> is required &mdash; unless <code>fullscreen</code> is set, which brings its own geometry &mdash; and <code>shader</code> always is. A missing one is a Lua error with a traceback rather than a silent skip &mdash; a <code>submit</code> with a typo in it is a bug in the scene.</p>
         <dl class="args">
             <dt>mesh</dt><dd>a <a href="#o-mesh">Mesh</a></dd>
             <dt>model</dt><dd>a <a href="#o-model">Model</a>; expands to one call per part, each with its own material and texture</dd>
@@ -721,6 +721,8 @@ local w, h, d = model:size()</code></pre>
             <dt>doubleSided</dt><dd>skip back-face culling <span class="def">= false</span></dd>
             <dt>instances</dt><dd><span class="def">= 1</span></dd>
             <dt>mode</dt><dd><code>"triangles"</code> <span class="def">(default)</span>, <code>"triangle_strip"</code>, <code>"lines"</code>, <code>"line_strip"</code>, <code>"line_loop"</code>, <code>"points"</code></dd>
+            <dt>fullscreen</dt><dd>draw a screen-covering triangle instead of geometry <span class="def">= false</span>. Needs no <code>mesh</code>; ignores position, scale, colour and texture.</dd>
+            <dt>pass</dt><dd><code>"background"</code>, <code>"world"</code> <span class="def">(default)</span> or <code>"overlay"</code>. A fullscreen call defaults to <code>"background"</code>.</dd>
         </dl>
 <pre><code>function scene:draw()
     Engine.renderer.submit({
@@ -737,6 +739,47 @@ local w, h, d = model:size()</code></pre>
         color = { 0.85, 0.35, 0.25 },
     })
 end</code></pre>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Fullscreen passes</b></span><span class="chip note">no geometry</span></div>
+        <p>A fullscreen call draws one triangle big enough to cover the screen, built inside the vertex shader out of <code>gl_VertexID</code> &mdash; there is no mesh, no model matrix and no material. <code>assets/shaders/universal-fullscreen.vert</code> is that vertex shader; pair it with whatever fragment shader the effect needs.</p>
+
+        <p>The three passes are drawn in a fixed order that the batching sort cannot cross: <strong>background</strong>, then <strong>world</strong>, then <strong>overlay</strong>. Background and overlay are not depth-tested, so a sky can never occlude the scene and an overlay is never occluded by it. Submission order within a pass does not matter.</p>
+
+<pre><code>function scene:init()
+    self.skyShader = Engine.shader.load(
+        "assets/shaders/universal-fullscreen.vert",
+        "assets/shaders/skybox.frag")
+end
+
+function scene:draw()
+    Engine.renderer.submit({ shader = self.skyShader, fullscreen = true })
+    Engine.renderer.submit({ model = self.map, shader = self.shader })
+end</code></pre>
+
+        <p>Wireframe skips fullscreen passes entirely: a sky drawn as three lines across the screen is noise, and the point of a wireframe is to see the geometry against an empty background.</p>
+    </div>
+
+    <div class="entry">
+        <div class="sig"><span class="name"><b>Shader uniforms the engine supplies</b></span></div>
+        <p>Every one of these is written only if the shader declares it, so a shader takes what it needs and is never warned about the rest. Bound once per program per frame.</p>
+        <div class="tablewrap">
+        <table>
+            <thead><tr><th>Uniform</th><th>What it is</th></tr></thead>
+            <tbody>
+                <tr><td><code>uView</code>, <code>uProjection</code></td><td><code>mat4</code> &mdash; the active camera's matrices</td></tr>
+                <tr><td><code>uCameraPosition</code></td><td><code>vec3</code> &mdash; the eye, in world space</td></tr>
+                <tr><td><code>invView</code>, <code>invProjection</code></td><td><code>mat4</code> &mdash; their inverses, for rebuilding a view ray per pixel</td></tr>
+                <tr><td><code>uModel</code>, <code>uNormalMatrix</code></td><td>per draw call; not sent to a fullscreen pass</td></tr>
+                <tr><td><code>uBaseColor</code>, <code>uAlpha</code>, <code>uHasTexture</code>, <code>uBaseColorTexture</code></td><td>the material; not sent to a fullscreen pass</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p>The inverse pair is what a sky is made of: unproject a clip-space corner with <code>invProjection</code> to get a direction in view space, rotate it into the world with <code>invView</code>, and every pixel knows which way it is looking.</p>
+<pre><code>vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+vec4 view = invProjection * clip;
+vec3 rayDir = normalize(vec3(invView * vec4(view.xy, -1.0, 0.0)));</code></pre>
     </div>
 
     <div class="entry">

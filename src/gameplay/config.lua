@@ -23,9 +23,17 @@ config.map = {
     recenter = true,
 }
 
-config.shader = {
-    vertex = "assets/shaders/basic.vert",
-    fragment = "assets/shaders/basic.frag",
+-- One entry per shader the scene turns on. `fullscreen` shaders build their own
+-- geometry from gl_VertexID and are submitted without a mesh.
+config.shaders = {
+    world = {
+        vertex = "assets/shaders/basic.vert",
+        fragment = "assets/shaders/basic.frag",
+    },
+    sky = {
+        vertex = "assets/shaders/universal-fullscreen.vert",
+        fragment = "assets/shaders/skybox.frag",
+    },
 }
 
 config.player = {
@@ -52,7 +60,27 @@ config.camera = {
     fov = 70,        -- wider than an overview: a first-person view wants periphery
     near = 0.18,     -- m -- close, but in proportion, or the depth buffer suffers
     farScale = 2.0,  -- multiples of the map's largest extent
-    overviewPitch = 25,
+}
+
+-- The strategy view: orthographic, fixed angle, pans and zooms over the map and
+-- does not turn. Lengths are fractions of the map's largest horizontal extent
+-- rather than metres, so the same numbers frame a village and a continent.
+config.rts = {
+    yaw = 45,     -- degrees; the map's corner points at the viewer, as an RTS does
+    pitch = 55,   -- degrees of downward tilt. Fixed: no rotation yet.
+
+    height    = 0.30, -- of the map visible top to bottom at the starting zoom
+    minHeight = 0.04, -- close enough to pick a building out
+    maxHeight = 1.10, -- far enough to see the whole map with room around it
+
+    panSpeed  = 0.9,  -- screen-heights per second, so it feels the same at any zoom
+    boost     = 2.5,  -- sprint pans faster
+    zoomSpeed = 2.0,  -- e-folds per second on the zoom keys
+    wheelStep = 0.15, -- e-folds per wheel notch
+
+    edgePan    = true,
+    edgeMargin = 6,   -- px of window edge that the pointer pans from
+    padding    = 0.15, -- of the map that the view may travel past its edge
 }
 
 -- Actions, not keys: the rest of the scripts ask for "jump", never for "space".
@@ -71,6 +99,13 @@ config.keys = {
     toggleView      = "f",
     toggleWireframe = "g",
     quit            = "escape",
+
+    -- The strategy camera. Panning is its whole movement, so it takes both the
+    -- arrows and WASD; nothing else is driving them while it is up.
+    panLeft    = { "a", "left" },
+    panRight   = { "d", "right" },
+    panForward = { "w", "up" },
+    panBack    = { "s", "down" },
 
     -- The overview camera, which answers to the arrows or to WASD.
     orbitLeft  = { "left", "a" },

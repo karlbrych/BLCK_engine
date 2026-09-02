@@ -264,7 +264,35 @@ void EngineCamera::apply(const Shader& shader) const
     {
         return;
     }
-    shader.set("uView", view());
-    shader.set("uProjection", projection());
-    shader.set("uCameraPosition", position);
+
+    // Only what the shader actually declares. A lit surface wants the matrices
+    // and the eye position; a fullscreen effect wants the inverses and has no
+    // use for the rest -- and neither should be warned about uniforms it was
+    // never going to read.
+    if (shader.has("uView"))
+    {
+        shader.set("uView", view());
+    }
+    if (shader.has("uProjection"))
+    {
+        shader.set("uProjection", projection());
+    }
+    if (shader.has("uCameraPosition"))
+    {
+        shader.set("uCameraPosition", position);
+    }
+
+    // The pair a fullscreen pass reconstructs view rays from: unproject a
+    // clip-space corner with invProjection, rotate it into the world with
+    // invView, and every pixel knows which way it is looking. Inverted here
+    // rather than cached, because it costs two 4x4 inversions per shader per
+    // frame and only for shaders that ask.
+    if (shader.has("invProjection"))
+    {
+        shader.set("invProjection", glm::inverse(projection()));
+    }
+    if (shader.has("invView"))
+    {
+        shader.set("invView", glm::inverse(view()));
+    }
 }

@@ -333,6 +333,13 @@ void Shader::dispatch(GLuint groupsX, GLuint groupsY, GLuint groupsZ) const
     glDispatchCompute(groupsX, groupsY, groupsZ);
 }
 
+namespace
+{
+// Threaded through location() rather than duplicated: has() wants the lookup
+// and the cache, but not the complaint.
+thread_local bool warnOnMissingUniform = true;
+} // namespace
+
 GLint Shader::location(std::string_view name) const
 {
     if (program == 0)
@@ -348,7 +355,7 @@ GLint Shader::location(std::string_view name) const
     // glGetUniformLocation needs a NUL-terminated string, which string_view is not.
     const std::string key(name);
     const GLint uniform = glGetUniformLocation(program, key.c_str());
-    if (uniform < 0)
+    if (uniform < 0 && warnOnMissingUniform)
     {
         // Cached as -1 as well, so an unused uniform warns once instead of every frame.
         std::cerr << "Shader: uniform '" << key << "' not found in program " << program
@@ -356,6 +363,14 @@ GLint Shader::location(std::string_view name) const
     }
     uniforms.emplace(key, uniform);
     return uniform;
+}
+
+bool Shader::has(std::string_view name) const
+{
+    warnOnMissingUniform = false;
+    const GLint uniform = location(name);
+    warnOnMissingUniform = true;
+    return uniform >= 0;
 }
 
 void Shader::set(std::string_view name, bool value) const
