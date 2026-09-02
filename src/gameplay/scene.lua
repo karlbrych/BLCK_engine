@@ -80,8 +80,6 @@ function scene:overhead()
     local extent = math.max(sizeX, sizeZ)
     local rts = config.rts
 
-    Engine.log(string.format("DBG map center=%.1f,%.1f,%.1f min=%.1f,%.1f max=%.1f,%.1f extent=%.1f ground=%.1f",
-        centerX, centerY, centerZ, minX, minZ, maxX, maxZ, extent, ground))
     self.camera:rts({
         center = { centerX, ground, centerZ },
         bounds = { minX, minZ, maxX, maxZ },

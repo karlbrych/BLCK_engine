@@ -402,10 +402,6 @@ function Instance:applyRts()
     self.handle:setRotation(r.yaw, -r.pitch)
     self.handle:setOrthographic(r.height, Engine.window.aspect(), r.near, r.far)
     self:placeRts()
-    local px, py, pz = self.handle:getPosition()
-    Engine.log(string.format("DBG applyRts focus=%.1f,%.1f,%.1f pos=%.1f,%.1f,%.1f h=%.1f boom=%.1f near=%.1f far=%.1f ortho=%s",
-        r.focus.x, r.focus.y, r.focus.z, px, py, pz, r.height, r.boom, r.near, r.far,
-        tostring(self.handle:isOrthographic())))
     return self
 end
 
@@ -558,10 +554,6 @@ function Instance:updateRts(dt)
 
     if moveX ~= 0 or moveZ ~= 0 then
         self:setFocus(r.focus.x + moveX, nil, r.focus.z + moveZ)
-    end
-    r.dbg = (r.dbg or 0) + 1
-    if r.dbg % 120 == 0 then
-        Engine.log(string.format("DBG rts focus=%.1f,%.1f zoom=%.1f", r.focus.x, r.focus.z, r.height))
     end
     return self
 end

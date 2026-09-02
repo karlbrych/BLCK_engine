@@ -64,7 +64,6 @@ private:
         bool failed = false;
     };
 
-    void installEngineTable(Renderer& renderer, GLFWwindow* window);
     // Runs one hook under a traceback handler; disables the script on error.
     void call(Script& script, const char* hook, sol::object argument = sol::lua_nil);
     // requested = the caller asked for this file by name, so a file that is not

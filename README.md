@@ -177,7 +177,11 @@ half-drawn frame.
 - `src/backend/EngineCamera.*` -- view/projection matrices, orbit/fly primitives
 - `src/backend/Renderer.*` -- draw-call queue, shader/model/texture caches, GL state
 - `src/backend/Model.*` -- the glTF/GLB reader, including its own JSON parser
-- `src/backend/ScriptManager.*` -- the Lua VM, the `Engine` table, hot reload
+- `src/backend/ScriptManager.*` -- the Lua VM: loading scripts, running their hooks, hot reload
+- `src/backend/scripting/` -- the `Engine` table the scripts see, one file per subject:
+  `CameraBindings`, `ResourceBindings` (meshes, models, textures, shaders),
+  `RendererBindings` (submit, debug), `PlatformBindings` (window, input, time, log),
+  plus `LuaConvert` (vectors to and from Lua tables) and `KeyNames` (key names to GLFW codes)
 - `src/backend/Mesh.*`, `src/backend/Shader.*`, `src/backend/Texture.*` -- GL resource wrappers
 - `src/gameplay/*.lua` -- the scripts themselves, plus `lib/` and `entities/`
 
