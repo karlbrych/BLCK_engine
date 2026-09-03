@@ -22,7 +22,9 @@ config.map = {
     -- Scanned data sits thousands of units from the origin; this brings it back.
     recenter = true,
 }
-
+config.color = {
+    main = {0.85,1.0,0.0}
+}
 -- One entry per shader the scene turns on. `fullscreen` shaders build their own
 -- geometry from gl_VertexID and are submitted without a mesh.
 config.shaders = {

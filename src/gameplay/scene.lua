@@ -19,9 +19,6 @@ function scene:init()
     Engine.renderer.clearColor(table.unpack(config.window.clearColor))
 
     self.shader = Engine.shader.load(config.shaders.world.vertex, config.shaders.world.fragment)
-    -- The sky is a fullscreen pass: no geometry, no model matrix. It rebuilds a
-    -- view ray per pixel from the camera's inverse matrices, which the renderer
-    -- hands to any shader declaring invView/invProjection.
     self.skyShader = Engine.shader.load(config.shaders.sky.vertex, config.shaders.sky.fragment)
     self.map = Engine.model.load(config.map.path, {
         recenter = config.map.recenter,
@@ -30,9 +27,7 @@ function scene:init()
 
     self.player = Player.new(config.player, config.unitsPerMetre)
 
-    -- The player stands on the map itself: one downward ray per frame against
-    -- the model's collision triangles. Without them there is nothing to fall
-    -- onto, so the player flies instead of walking.
+    
     if self.map:hasCollision() then
         self.player:setGround(function(x, z, fromY)
             return self.map:groundHeight(x, z, fromY)
