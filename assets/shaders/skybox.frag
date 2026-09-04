@@ -15,7 +15,6 @@ void main(){
     vec3 viewRay = farPoint.xyz / farPoint.w - nearPoint.xyz / nearPoint.w;
     vec3 rayDir = normalize(mat3(invView) * viewRay);
 
-    // Fixed low sun direction -- a sunrise sitting just above the horizon.
     vec3 sunDir = normalize(vec3(0.35, 0.12, -0.9));
 
     
@@ -25,8 +24,6 @@ void main(){
     vec3 horizonColor = vec3(1.0, 0.55, 0.30);
     vec3 skyColor = mix(zenithColor, horizonColor, horizonBand);
 
-    // Below the horizon fades toward a dimmer, cooler tone so the ground
-    // side of the skybox doesn't glow as brightly as the sky.
     float below = clamp(-rayDir.y, 0.0, 1.0);
     skyColor = mix(skyColor, vec3(0.10, 0.08, 0.10), below * 0.6);
 
